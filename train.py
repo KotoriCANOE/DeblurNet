@@ -25,6 +25,7 @@ class Train:
     def __init__(self, config):
         self.dataset = None
         self.num_epochs = None
+        self.max_steps = None
         self.random_seed = None
         self.device = None
         self.postfix = None
@@ -67,8 +68,13 @@ class Train:
         # training set
         self.epoch_steps = len(files) // self.batch_size
         self.epoch_size = self.epoch_steps * self.batch_size
-        self.max_steps = self.epoch_steps * self.num_epochs
+        if self.max_steps is None:
+            self.max_steps = self.epoch_steps * self.num_epochs
+        else:
+            self.num_epochs = (self.max_steps + self.epoch_steps - 1) // self.epoch_steps
         self.train_set = files[:self.epoch_size]
+        eprint('train set: {}\nepoch steps: {}\nnum epochs: {}\nmax steps: {}\n'
+            .format(len(self.train_set), self.epoch_steps, self.num_epochs, self.max_steps))
         # pre-computing validation set
         with tf.Graph().as_default():
             with tf.device('/cpu:0'):
@@ -82,10 +88,11 @@ class Train:
                 self.config, self.train_set, is_training=True)
         with tf.device(self.device):
             self.model = SRN(self.config)
-            self.g_loss, self.loss_summary = self.model.build_train(
+            self.g_loss, self.g_loss_main = self.model.build_train(
                 self.inputs, self.labels)
             self.global_step = tf.train.get_or_create_global_step()
             self.g_train_op = self.model.train(self.global_step)
+            self.all_summary, self.loss_summary = self.model.get_summaries()
 
     def build_saver(self):
         # a Saver object to restore the variables with mappings
@@ -104,7 +111,6 @@ class Train:
             as_text=False, clear_devices=True, clear_extraneous_savers=True)
 
     def train_session(self):
-        self.summary_all = tf.summary.merge_all()
         self.train_writer = tf.summary.FileWriter(self.train_dir + '/train',
             tf.get_default_graph(), max_queue=20, flush_secs=120)
         self.val_writer = tf.summary.FileWriter(self.train_dir + '/val')
@@ -114,10 +120,10 @@ class Train:
         epoch = global_step // self.epoch_steps
         # training
         feed_dict = {'training:0': True}
-        summary, g_loss, _ = sess.run((self.summary_all, self.g_loss,
-            self.g_train_op), feed_dict)
-        self.train_writer.add_summary(summary, global_step)
         if self.log_frequency > 0 and global_step % self.log_frequency == 0:
+            summary, g_loss, _ = sess.run((self.all_summary, self.g_loss,
+                self.g_train_op), feed_dict)
+            self.train_writer.add_summary(summary, global_step)
             import time
             from datetime import datetime
             time_current = time.time()
@@ -125,16 +131,18 @@ class Train:
             self.log_last = time_current
             sec_batch = duration / self.log_frequency
             samples_sec = self.batch_size / sec_batch
-            eprint('{}: epoch {}, step {}, train_loss={:.5} ({:.1f} samples/sec, {:.3f} sec/batch)'
+            eprint('{}: epoch {}, step {}, train loss: {:.5} ({:.1f} samples/sec, {:.3f} sec/batch)'
                 .format(datetime.now(), epoch, global_step, g_loss, samples_sec, sec_batch))
+        else:
+            sess.run((self.g_train_op), feed_dict)
         # validation
         if self.val_frequency > 0 and global_step % self.val_frequency == 0:
             feed_dict = {self.inputs: self.val_inputs,
                 self.labels: self.val_labels}
-            summary, g_loss = sess.run((self.loss_summary, self.g_loss), feed_dict)
+            summary, g_loss_main = sess.run((self.loss_summary, self.g_loss_main), feed_dict)
             self.val_writer.add_summary(summary, global_step)
-            eprint('{}: epoch {}, step {}, val_loss={:.5}'
-                .format(datetime.now(), epoch, global_step, g_loss))
+            eprint('{}: epoch {}, step {}, val loss: {:.5}'
+                .format(datetime.now(), epoch, global_step, g_loss_main))
 
     def train(self, sess):
         import time
@@ -147,7 +155,8 @@ class Train:
             self.saver_pt.restore(sess, os.path.join(self.pretrain_dir, 'model'))
         # otherwise, initialize from start
         else:
-            sess.run(tf.global_variables_initializer())
+            with tf.variable_scope('global_initializer'):
+                sess.run(tf.global_variables_initializer())
         # initialization
         self.log_last = time.time()
         ckpt_last = time.time()
@@ -189,6 +198,7 @@ def main(argv=None):
     # training parameters
     argp.add_argument('dataset')
     argp.add_argument('--num_epochs', type=int, default=24)
+    argp.add_argument('--max_steps', type=int) # 255000
     argp.add_argument('--random_seed', type=int)
     argp.add_argument('--device', default='/gpu:0')
     argp.add_argument('--postfix', default='')
@@ -197,8 +207,8 @@ def main(argv=None):
     argp.add_argument('--restore', action='store_true')
     argp.add_argument('--save_steps', type=int, default=5000)
     argp.add_argument('--ckpt_period', type=int, default=600)
-    argp.add_argument('--log_frequency', type=int, default=500)
-    argp.add_argument('--val_frequency', type=int, default=500)
+    argp.add_argument('--log_frequency', type=int, default=100)
+    argp.add_argument('--val_frequency', type=int, default=100)
     argp.add_argument('--batch-size', type=int, default=16)
     argp.add_argument('--val-size', type=int, default=128)
     # data parameters
@@ -226,7 +236,7 @@ def main(argv=None):
     argp.add_argument('--var-ema', type=float, default=0.999)
     argp.add_argument('--generator-wd', type=float, default=1e-6)
     argp.add_argument('--generator-lr', type=float, default=1e-3)
-    argp.add_argument('--generator-lr-step', type=int, default=500)
+    argp.add_argument('--generator-lr-step', type=int, default=1000)
     # parse
     args = argp.parse_args(argv)
     args.train_dir = args.train_dir.format(postfix=args.postfix)

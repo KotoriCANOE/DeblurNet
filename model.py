@@ -25,9 +25,11 @@ class SRN:
         self.generator_acti = ACTIVATION
         self.generator_wd = 1e-6
         self.generator_lr = 1e-3
-        self.generator_lr_step = 500
+        self.generator_lr_step = 1000
         self.generator_vkey = 'generator_var'
         self.generator_lkey = 'generator_loss'
+        # collections
+        self.loss_sums = []
         # copy all the properties from config object
         if config is not None:
             self.__dict__.update(config.__dict__)
@@ -103,6 +105,7 @@ class SRN:
         # model definition
         skips = []
         with tf.variable_scope(main_scope):
+            last = tf.identity(last, 'inputs')
             skips.append(last)
             with tf.variable_scope('InBlock'):
                 last = self.EBlock(last, 32, 3, 1, format, activation,
@@ -127,6 +130,7 @@ class SRN:
                 last = self.OutBlock(last, 32, self.out_channels, 3, 1, format, activation,
                     regularizer, var_key)
                 last += skips.pop()
+            last = tf.identity(last, 'outputs')
         # trainable/model/save/restore variables
         self.g_tvars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=main_scope)
         self.g_mvars = tf.get_collection(tf.GraphKeys.MODEL_VARIABLES, scope=main_scope)
@@ -142,25 +146,20 @@ class SRN:
     def build_g_loss(self, ref, pred):
         loss_key = self.generator_lkey
         with tf.variable_scope(loss_key):
-            summaries = []
-            # data range conversion
-            if self.output_range == 2:
-                ref = (ref + 1) * 0.5
-                pred = (pred + 1) * 0.5
             # L1 loss
-            l1_loss = tf.losses.absolute_difference(ref, pred, 1.0, 'l1_loss')
-            summaries.append(tf.summary.scalar('l1_loss', l1_loss))
+            l1_loss = tf.losses.absolute_difference(ref, pred, 1.0)
+            self.loss_sums.append(tf.summary.scalar('l1_loss', l1_loss))
             # total loss
             losses = tf.losses.get_losses(loss_key)
-            total_loss = tf.add_n(losses, 'total_loss')
+            g_loss_main = tf.add_n(losses, 'g_loss_main')
             # regularization loss
-            reg_losses = tf.losses.get_regularization_losses('generator')
-            reg_loss = tf.add_n(reg_losses, 'reg_loss')
-            tf.summary.scalar('reg_loss', reg_loss)
+            g_reg_losses = tf.losses.get_regularization_losses('generator')
+            g_reg_loss = tf.add_n(g_reg_losses)
+            tf.summary.scalar('g_reg_loss', g_reg_loss)
             # final loss
-            self.g_loss = total_loss + reg_loss
+            self.g_loss = g_loss_main + g_reg_loss
             tf.summary.scalar('g_loss', self.g_loss)
-        return summaries
+        return g_loss_main
 
     def build_model(self, inputs=None):
         # inputs
@@ -175,9 +174,9 @@ class SRN:
         self.outputs = self.generator(self.inputs)
         # outputs
         if self.output_range == 2:
-            tf.multiply(self.outputs + 1, 0.5, name='Output')
+            self.outputs = tf.multiply(self.outputs + 1, 0.5, name='Output')
         else:
-            tf.identity(self.outputs, name='Output')
+            self.outputs = tf.identity(self.outputs, name='Output')
         # all the restore variables
         self.rvars = self.g_rvars
         # return outputs
@@ -190,22 +189,19 @@ class SRN:
         else:
             self.labels = tf.identity(labels, name='Label')
             self.labels.set_shape(self.output_shape)
-        if self.output_shape == 2:
-            self.labels = self.labels * 2 - 1
         # build model
         self.build_model(inputs)
         # build generator loss
-        g_summaries = self.build_g_loss(self.labels, self.outputs)
-        # summary
-        loss_summary = tf.summary.merge(g_summaries)
+        g_loss_main = self.build_g_loss(self.labels, self.outputs)
         # return total loss
-        return self.g_loss, loss_summary
+        return self.g_loss, g_loss_main
 
     def train(self, global_step):
         # dependencies to be updated
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         # learning rate
-        g_lr = tf.train.cosine_decay(self.generator_lr, global_step, self.generator_lr_step)
+        g_lr = tf.train.cosine_decay_restarts(self.generator_lr,
+            global_step, self.generator_lr_step)
         tf.summary.scalar('generator_lr', g_lr)
         # optimizer
         g_opt = tf.contrib.opt.NadamOptimizer(g_lr)
@@ -218,12 +214,18 @@ class SRN:
             tf.summary.histogram(var.op.name, var)
         # save moving average of trainalbe variables
         if self.var_ema > 0:
-            with tf.control_dependencies(update_ops):
-                update_ops = [self.ema.apply(self.g_tvars)]
-            self.g_svars = [self.ema.average(var) for var in self.g_tvars] + self.g_mvars
+            with tf.variable_scope('variables_ema'):
+                with tf.control_dependencies(update_ops):
+                    update_ops = [self.ema.apply(self.g_tvars)]
+                self.g_svars = [self.ema.average(var) for var in self.g_tvars] + self.g_mvars
         # all the saver variables
         self.svars = self.g_svars
         # return training op
         with tf.control_dependencies(update_ops):
             g_train_op = tf.no_op('g_train')
         return g_train_op
+
+    def get_summaries(self):
+        all_summary = tf.summary.merge_all()
+        loss_summary = tf.summary.merge(self.loss_sums)
+        return all_summary, loss_summary

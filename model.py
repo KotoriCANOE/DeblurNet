@@ -3,7 +3,7 @@ import tensorflow.contrib.layers as slim
 import layers
 
 ACTIVATION = tf.nn.relu
-FORMAT = 'NCHW'
+DATA_FORMAT = 'NCHW'
 
 class SRN:
     def __init__(self, config=None):
@@ -11,15 +11,15 @@ class SRN:
         self.dtype = tf.float32
         self.input_range = 2 # internal range of input. 1: [0,1], 2: [-1,1]
         self.output_range = 2 # internal range of output. 1: [0,1], 2: [-1,1]
-        self.format = FORMAT
+        self.data_format = DATA_FORMAT
         self.in_channels = 3
         self.out_channels = 3
         self.input_shape = [None] * 4
         self.output_shape = [None] * 4
-        self.input_shape[-3 if self.format == 'NCHW' else -1] = self.in_channels
-        self.output_shape[-3 if self.format == 'NCHW' else -1] = self.out_channels
+        self.input_shape[-3 if self.data_format == 'NCHW' else -1] = self.in_channels
+        self.output_shape[-3 if self.data_format == 'NCHW' else -1] = self.out_channels
         # train parameters
-        self.seed = None
+        self.random_seed = None
         self.var_ema = 0.999
         # generator parameters
         self.generator_acti = ACTIVATION
@@ -34,14 +34,16 @@ class SRN:
         # create a moving average object for trainable variables
         if self.var_ema > 0:
             self.ema = tf.train.ExponentialMovingAverage(self.var_ema)
-    
-    def ResBlock(self, last, channels, kernel=3, stride=1, biases=True, format=FORMAT,
+        # state
+        self.training = tf.Variable(False, trainable=False, name='training')
+
+    def ResBlock(self, last, channels, kernel=3, stride=1, biases=True, format=DATA_FORMAT,
         dilate=1, activation=ACTIVATION, normalizer=None,
         initializer=None, regularizer=None, collections=None):
         biases = tf.initializers.zeros(self.dtype) if biases else None
         if initializer is None:
             initializer = tf.initializers.variance_scaling(
-                1.0, 'fan_in', 'normal', self.seed, self.dtype)
+                1.0, 'fan_in', 'normal', self.random_seed, self.dtype)
         skip = last
         last = slim.conv2d(last, channels, kernel, stride, 'SAME', format,
             dilate, activation, normalizer, None, initializer, regularizer, biases,
@@ -51,41 +53,50 @@ class SRN:
             variables_collections=collections)
         last += skip
         return last
-    
-    def EBlock(self, last, channels, kernel=3, stride=2, format=FORMAT,
+
+    def EBlock(self, last, channels, kernel=3, stride=2, format=DATA_FORMAT,
         activation=ACTIVATION, regularizer=None, collections=None):
+        initializer = tf.initializers.variance_scaling(
+            1.0, 'fan_in', 'normal', self.random_seed, self.dtype)
         last = slim.conv2d(last, channels, kernel, stride, 'SAME', format,
-            1, activation, weights_regularizer=regularizer, variables_collections=collections)
+            1, activation, weights_initializer=initializer,
+            weights_regularizer=regularizer, variables_collections=collections)
         last = self.ResBlock(last, channels, format=format,
             activation=activation, regularizer=regularizer, collections=collections)
         last = self.ResBlock(last, channels, format=format,
             activation=activation, regularizer=regularizer, collections=collections)
         return last
 
-    def DBlock(self, last, channels, channels2, kernel=3, stride=2, format=FORMAT,
+    def DBlock(self, last, channels, channels2, kernel=3, stride=2, format=DATA_FORMAT,
         activation=ACTIVATION, regularizer=None, collections=None):
+        initializer = tf.initializers.variance_scaling(
+            1.0, 'fan_in', 'normal', self.random_seed, self.dtype)
         last = self.ResBlock(last, channels, format=format,
             activation=activation, regularizer=regularizer, collections=collections)
         last = self.ResBlock(last, channels, format=format,
             activation=activation, regularizer=regularizer, collections=collections)
         last = slim.conv2d_transpose(last, channels2, kernel, stride, 'SAME', format,
-            activation, weights_regularizer=regularizer, variables_collections=collections)
+            activation, weights_initializer=initializer,
+            weights_regularizer=regularizer, variables_collections=collections)
         return last
-    
-    def OutBlock(self, last, channels, channels2, kernel=3, stride=1, format=FORMAT,
+
+    def OutBlock(self, last, channels, channels2, kernel=3, stride=1, format=DATA_FORMAT,
         activation=ACTIVATION, regularizer=None, collections=None):
+        initializer = tf.initializers.variance_scaling(
+            1.0, 'fan_in', 'normal', self.random_seed, self.dtype)
         last = self.ResBlock(last, channels, format=format,
             activation=activation, regularizer=regularizer, collections=collections)
         last = self.ResBlock(last, channels, format=format,
             activation=activation, regularizer=regularizer, collections=collections)
         last = slim.conv2d(last, channels2, kernel, stride, 'SAME', format,
-            1, None, weights_regularizer=regularizer, variables_collections=collections)
+            1, None, weights_initializer=initializer,
+            weights_regularizer=regularizer, variables_collections=collections)
         return last
 
-    def generator(self, last, train=False):
+    def generator(self, last):
         # parameters
         main_scope = 'generator'
-        format = self.format
+        format = self.data_format
         activation = self.generator_acti
         regularizer = slim.l2_regularizer(self.generator_wd)
         var_key = self.generator_vkey
@@ -131,13 +142,14 @@ class SRN:
     def build_g_loss(self, ref, pred):
         loss_key = self.generator_lkey
         with tf.variable_scope(loss_key):
+            summaries = []
             # data range conversion
             if self.output_range == 2:
                 ref = (ref + 1) * 0.5
                 pred = (pred + 1) * 0.5
             # L1 loss
             l1_loss = tf.losses.absolute_difference(ref, pred, 1.0, 'l1_loss')
-            tf.summary.scalar('l1_loss', l1_loss)
+            summaries.append(tf.summary.scalar('l1_loss', l1_loss))
             # total loss
             losses = tf.losses.get_losses(loss_key)
             total_loss = tf.add_n(losses, 'total_loss')
@@ -148,12 +160,9 @@ class SRN:
             # final loss
             self.g_loss = total_loss + reg_loss
             tf.summary.scalar('g_loss', self.g_loss)
-        print('losses:', losses)
-        print('reg_losses:', reg_losses)
-        print(total_loss)
-        return self.g_loss
-    
-    def build_model(self, inputs=None, train=False):
+        return summaries
+
+    def build_model(self, inputs=None):
         # inputs
         if inputs is None:
             self.inputs = tf.placeholder(self.dtype, self.input_shape, name='Input')
@@ -163,12 +172,14 @@ class SRN:
         if self.input_range == 2:
             self.inputs = self.inputs * 2 - 1
         # forward pass
-        self.outputs = self.generator(self.inputs, train=train)
+        self.outputs = self.generator(self.inputs)
         # outputs
         if self.output_range == 2:
             tf.multiply(self.outputs + 1, 0.5, name='Output')
         else:
             tf.identity(self.outputs, name='Output')
+        # all the restore variables
+        self.rvars = self.g_rvars
         # return outputs
         return self.outputs
 
@@ -177,16 +188,18 @@ class SRN:
         if labels is None:
             self.labels = tf.placeholder(self.dtype, self.output_shape, name='Label')
         else:
-            self.labels = tf.identity(self.labels, name='Label')
+            self.labels = tf.identity(labels, name='Label')
             self.labels.set_shape(self.output_shape)
         if self.output_shape == 2:
             self.labels = self.labels * 2 - 1
         # build model
-        self.build_model(inputs, train=True)
+        self.build_model(inputs)
         # build generator loss
-        self.build_g_loss(self.labels, self.outputs)
+        g_summaries = self.build_g_loss(self.labels, self.outputs)
+        # summary
+        loss_summary = tf.summary.merge(g_summaries)
         # return total loss
-        return self.g_loss
+        return self.g_loss, loss_summary
 
     def train(self, global_step):
         # dependencies to be updated
@@ -208,6 +221,8 @@ class SRN:
             with tf.control_dependencies(update_ops):
                 update_ops = [self.ema.apply(self.g_tvars)]
             self.g_svars = [self.ema.average(var) for var in self.g_tvars] + self.g_mvars
+        # all the saver variables
+        self.svars = self.g_svars
         # return training op
         with tf.control_dependencies(update_ops):
             g_train_op = tf.no_op('g_train')

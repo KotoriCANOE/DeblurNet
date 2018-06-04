@@ -73,3 +73,21 @@ def listdir_files(path, recursive=True, filter_ext=None, encoding=None):
                     eprint(err)
         if not recursive: break
     return files
+
+# reset random seeds
+def reset_random(seed=0):
+    import tensorflow as tf
+    import numpy as np
+    import random
+    tf.set_random_seed(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+
+# setup tensorflow and return session
+def create_session():
+    import tensorflow as tf
+    # create session
+    gpu_options = tf.GPUOptions(allow_growth=True)
+    config = tf.ConfigProto(gpu_options=gpu_options,
+        allow_soft_placement=True, log_device_placement=False)
+    return tf.Session(config=config)

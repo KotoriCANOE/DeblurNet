@@ -1,6 +1,19 @@
 import tensorflow as tf
 import numpy as np
 
+def input_arguments(argp):
+    # pre-processing parameters
+    argp.add_argument('--threads', type=int, default=16)
+    argp.add_argument('--threads-py', type=int, default=16)
+    argp.add_argument('--buffer-size', type=int, default=65536)
+    argp.add_argument('--pre-down', action='store_true')
+    argp.add_argument('--color-augmentation', type=float, default=0.05)
+    argp.add_argument('--multistage-resize', type=int, default=2)
+    argp.add_argument('--random-resizer', type=int, default=0)
+    argp.add_argument('--noise-scale', type=float, default=0.01)
+    argp.add_argument('--noise-corr', type=float, default=0.75)
+    argp.add_argument('--jpeg-coding', type=float, default=2.0)
+
 def inputs(config, files, is_training=False, is_testing=False):
     # parameters
     channels = config.in_channels

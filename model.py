@@ -3,6 +3,7 @@ import tensorflow.contrib.layers as slim
 import layers
 
 ACTIVATION = tf.nn.relu
+#ACTIVATION = layers.Swish
 DATA_FORMAT = 'NCHW'
 
 class SRN:
@@ -37,61 +38,103 @@ class SRN:
         if self.var_ema > 0:
             self.ema = tf.train.ExponentialMovingAverage(self.var_ema)
         # state
-        self.training = tf.Variable(False, trainable=False, name='training')
+        self.training = tf.Variable(False, trainable=False, name='training',
+            collections=[tf.GraphKeys.GLOBAL_VARIABLES, tf.GraphKeys.MODEL_VARIABLES])
+    
+    @staticmethod
+    def add_arguments(argp):
+        # data parameters
+        argp.add_argument('--dtype', type=int, default=2)
+        argp.add_argument('--data-format', default='NCHW')
+        argp.add_argument('--in-channels', type=int, default=3)
+        argp.add_argument('--out-channels', type=int, default=3)
+        # model parameters
+        argp.add_argument('--input-range', type=int, default=2)
+        argp.add_argument('--output-range', type=int, default=2)
+        argp.add_argument('--scaling', type=int, default=1)
+        argp.add_argument('--var-ema', type=float, default=0.999)
+        argp.add_argument('--generator-wd', type=float, default=1e-6)
+        argp.add_argument('--generator-lr', type=float, default=1e-3)
+        argp.add_argument('--generator-lr-step', type=int, default=1000)
 
     def ResBlock(self, last, channels, kernel=3, stride=1, biases=True, format=DATA_FORMAT,
         dilate=1, activation=ACTIVATION, normalizer=None,
-        initializer=None, regularizer=None, collections=None):
+        regularizer=None, collections=None):
         biases = tf.initializers.zeros(self.dtype) if biases else None
-        if initializer is None:
-            initializer = tf.initializers.variance_scaling(
-                1.0, 'fan_in', 'normal', self.random_seed, self.dtype)
+        initializer = tf.initializers.variance_scaling(
+            1.0, 'fan_in', 'normal', self.random_seed, self.dtype)
         skip = last
+        if normalizer: last = normalizer(last)
+        if activation: last = activation(last)
         last = slim.conv2d(last, channels, kernel, stride, 'SAME', format,
             dilate, activation, normalizer, None, initializer, regularizer, biases,
             variables_collections=collections)
         last = slim.conv2d(last, channels, kernel, stride, 'SAME', format,
-            dilate, None, normalizer, None, initializer, regularizer, biases,
+            dilate, None, None, None, initializer, regularizer, biases,
             variables_collections=collections)
         last += skip
         return last
 
-    def EBlock(self, last, channels, kernel=3, stride=2, format=DATA_FORMAT,
-        activation=ACTIVATION, regularizer=None, collections=None):
+    def InBlock(self, last, channels, kernel=3, stride=1, format=DATA_FORMAT,
+        activation=ACTIVATION, normalizer=None, regularizer=None, collections=None):
         initializer = tf.initializers.variance_scaling(
             1.0, 'fan_in', 'normal', self.random_seed, self.dtype)
         last = slim.conv2d(last, channels, kernel, stride, 'SAME', format,
-            1, activation, weights_initializer=initializer,
+            1, None, None, weights_initializer=initializer,
             weights_regularizer=regularizer, variables_collections=collections)
         last = self.ResBlock(last, channels, format=format,
-            activation=activation, regularizer=regularizer, collections=collections)
+            activation=activation, normalizer=normalizer,
+            regularizer=regularizer, collections=collections)
         last = self.ResBlock(last, channels, format=format,
-            activation=activation, regularizer=regularizer, collections=collections)
+            activation=activation, normalizer=normalizer,
+            regularizer=regularizer, collections=collections)
+        return last
+
+    def EBlock(self, last, channels, kernel=3, stride=2, format=DATA_FORMAT,
+        activation=ACTIVATION, normalizer=None, regularizer=None, collections=None):
+        initializer = tf.initializers.variance_scaling(
+            1.0, 'fan_in', 'normal', self.random_seed, self.dtype)
+        if activation: last = activation(last)
+        last = slim.conv2d(last, channels, kernel, stride, 'SAME', format,
+            1, None, None, weights_initializer=initializer,
+            weights_regularizer=regularizer, variables_collections=collections)
+        last = self.ResBlock(last, channels, format=format,
+            activation=activation, normalizer=normalizer,
+            regularizer=regularizer, collections=collections)
+        last = self.ResBlock(last, channels, format=format,
+            activation=activation, normalizer=normalizer,
+            regularizer=regularizer, collections=collections)
         return last
 
     def DBlock(self, last, channels, channels2, kernel=3, stride=2, format=DATA_FORMAT,
-        activation=ACTIVATION, regularizer=None, collections=None):
+        activation=ACTIVATION, normalizer=None, regularizer=None, collections=None):
         initializer = tf.initializers.variance_scaling(
             1.0, 'fan_in', 'normal', self.random_seed, self.dtype)
         last = self.ResBlock(last, channels, format=format,
-            activation=activation, regularizer=regularizer, collections=collections)
+            activation=activation, normalizer=normalizer,
+            regularizer=regularizer, collections=collections)
         last = self.ResBlock(last, channels, format=format,
-            activation=activation, regularizer=regularizer, collections=collections)
+            activation=activation, normalizer=normalizer,
+            regularizer=regularizer, collections=collections)
+        if activation: last = activation(last)
         last = slim.conv2d_transpose(last, channels2, kernel, stride, 'SAME', format,
-            activation, weights_initializer=initializer,
+            None, None, weights_initializer=initializer,
             weights_regularizer=regularizer, variables_collections=collections)
         return last
 
     def OutBlock(self, last, channels, channels2, kernel=3, stride=1, format=DATA_FORMAT,
-        activation=ACTIVATION, regularizer=None, collections=None):
+        activation=ACTIVATION, normalizer=None, regularizer=None, collections=None):
         initializer = tf.initializers.variance_scaling(
             1.0, 'fan_in', 'normal', self.random_seed, self.dtype)
         last = self.ResBlock(last, channels, format=format,
-            activation=activation, regularizer=regularizer, collections=collections)
+            activation=activation, normalizer=normalizer,
+            regularizer=regularizer, collections=collections)
         last = self.ResBlock(last, channels, format=format,
-            activation=activation, regularizer=regularizer, collections=collections)
+            activation=activation, normalizer=normalizer,
+            regularizer=regularizer, collections=collections)
+        if activation: last = activation(last)
         last = slim.conv2d(last, channels2, kernel, stride, 'SAME', format,
-            1, None, weights_initializer=initializer,
+            1, None, None, weights_initializer=initializer,
             weights_regularizer=regularizer, variables_collections=collections)
         return last
 
@@ -100,6 +143,9 @@ class SRN:
         main_scope = 'generator'
         format = self.data_format
         activation = self.generator_acti
+        #normalizer = None
+        normalizer = lambda x: slim.batch_norm(x, 0.999, center=True, scale=True,
+            is_training=self.training, data_format=format, renorm=False)
         regularizer = slim.l2_regularizer(self.generator_wd)
         var_key = self.generator_vkey
         # model definition
@@ -108,39 +154,40 @@ class SRN:
             last = tf.identity(last, 'inputs')
             skips.append(last)
             with tf.variable_scope('InBlock'):
-                last = self.EBlock(last, 32, 3, 1, format, activation,
-                    regularizer, var_key)
+                last = self.InBlock(last, 32, 3, 1, format, activation,
+                    normalizer, regularizer, var_key)
                 skips.append(last)
             with tf.variable_scope('EBlock_1'):
                 last = self.EBlock(last, 64, 3, 2, format, activation,
-                    regularizer, var_key)
+                    normalizer, regularizer, var_key)
                 skips.append(last)
             with tf.variable_scope('EBlock_2'):
                 last = self.EBlock(last, 128, 3, 2, format, activation,
-                    regularizer, var_key)
+                    normalizer, regularizer, var_key)
             with tf.variable_scope('DBlock_1'):
                 last = self.DBlock(last, 128, 64, 3, 2, format, activation,
-                    regularizer, var_key)
+                    normalizer, regularizer, var_key)
                 last += skips.pop()
             with tf.variable_scope('DBlock_2'):
                 last = self.DBlock(last, 64, 32, 3, 2, format, activation,
-                    regularizer, var_key)
+                    normalizer, regularizer, var_key)
                 last += skips.pop()
             with tf.variable_scope('OutBlock'):
                 last = self.OutBlock(last, 32, self.out_channels, 3, 1, format, activation,
-                    regularizer, var_key)
+                    normalizer, regularizer, var_key)
                 last += skips.pop()
             last = tf.identity(last, 'outputs')
         # trainable/model/save/restore variables
-        self.g_tvars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=main_scope)
-        self.g_mvars = tf.get_collection(tf.GraphKeys.MODEL_VARIABLES, scope=main_scope)
+        self.g_tvars = tf.trainable_variables(main_scope)
+        self.g_mvars = tf.model_variables(main_scope)
         self.g_mvars = [i for i in self.g_mvars if i not in self.g_tvars]
         self.g_svars = list(set(self.g_tvars + self.g_mvars))
         self.g_rvars = self.g_svars.copy()
         # restore moving average of trainable variables
         if self.var_ema > 0:
-            self.g_rvars = {**{self.ema.average_name(var): var for var in self.g_tvars},
-                **{var.op.name: var for var in self.g_mvars}}
+            with tf.variable_scope('variables_ema'):
+                self.g_rvars = {**{self.ema.average_name(var): var for var in self.g_tvars},
+                    **{var.op.name: var for var in self.g_mvars}}
         return last
 
     def build_g_loss(self, ref, pred):

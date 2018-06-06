@@ -1,3 +1,6 @@
+import tensorflow as tf
+import numpy as np
+
 # stderr print
 def eprint(*args, **kwargs):
     import sys
@@ -76,8 +79,6 @@ def listdir_files(path, recursive=True, filter_ext=None, encoding=None):
 
 # reset random seeds
 def reset_random(seed=0):
-    import tensorflow as tf
-    import numpy as np
     import random
     tf.set_random_seed(seed)
     random.seed(seed)
@@ -85,9 +86,18 @@ def reset_random(seed=0):
 
 # setup tensorflow and return session
 def create_session():
-    import tensorflow as tf
     # create session
     gpu_options = tf.GPUOptions(allow_growth=True)
     config = tf.ConfigProto(gpu_options=gpu_options,
         allow_soft_placement=True, log_device_placement=False)
     return tf.Session(config=config)
+
+# encode a batch of images to a list of pngs
+def BatchPNG(images, batch_size, dtype=tf.uint8):
+    pngs = []
+    for i in range(batch_size):
+        img = images[i]
+        if img.dtype != tf.uint8: img = tf.image.convert_image_dtype(img, dtype, saturate=True)
+        png = tf.image.encode_png(img, compression=9)
+        pngs.append(png)
+    return pngs

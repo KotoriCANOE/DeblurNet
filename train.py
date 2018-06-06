@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 import os
 from utils import eprint, listdir_files, reset_random, create_session
-from input import inputs
+from input import inputs, input_arguments
 from model import SRN
 
 # class for training session
@@ -88,7 +88,7 @@ class Train:
         # a Saver object to restore the variables with mappings
         # only for restoring from pre-trained model
         if self.pretrain_dir and not self.restore:
-            self.saver_pt = tf.train.Saver(var_list=self.model.rvars)
+            self.saver_pt = tf.train.Saver(self.model.rvars)
         # a Saver object to save recent checkpoints
         self.saver_ckpt = tf.train.Saver(max_to_keep=5,
             save_relative_paths=True)
@@ -107,6 +107,8 @@ class Train:
         return create_session()
 
     def run_sess(self, sess, global_step):
+        from datetime import datetime
+        import time
         last_step = global_step + 1 >= self.max_steps
         epoch = global_step // self.epoch_steps
         # training
@@ -116,8 +118,6 @@ class Train:
             summary, g_loss, _ = sess.run((self.all_summary, self.g_loss,
                 self.g_train_op), feed_dict)
             self.train_writer.add_summary(summary, global_step)
-            import time
-            from datetime import datetime
             time_current = time.time()
             duration = time_current - self.log_last
             self.log_last = time_current
@@ -140,11 +140,12 @@ class Train:
             eprint(val_log)
         # log result for the last step
         if self.log_file and last_step:
-            last_log = '{}\nepoch {}, step {}, train loss: {:.5}, val loss: {:.5}'\
-                .format(datetime.now(), epoch, global_step, g_loss, g_loss_main)
+            last_log = 'epoch {}, step {}, train loss: {:.5}, val loss: {:.5}'\
+                .format(epoch, global_step, g_loss, g_loss_main)
             with open(self.log_file, 'a', encoding='utf-8') as fd:
                 fd.write('Training No.{}\n'.format(self.postfix))
                 fd.write(self.train_dir + '\n')
+                fd.write('{}\n'.format(datetime.now()))
                 fd.write(last_log + '\n\n')
 
     def train(self, sess):
@@ -215,31 +216,12 @@ def main(argv=None):
     argp.add_argument('--batch-size', type=int, default=16)
     argp.add_argument('--val-size', type=int, default=32)
     # data parameters
-    argp.add_argument('--data-format', default='NCHW')
-    argp.add_argument('--in-channels', type=int, default=3)
-    argp.add_argument('--out-channels', type=int, default=3)
     argp.add_argument('--patch-height', type=int, default=192)
     argp.add_argument('--patch-width', type=int, default=192)
-    argp.add_argument('--dtype', type=int, default=2)
     # pre-processing parameters
-    argp.add_argument('--threads', type=int, default=16)
-    argp.add_argument('--threads-py', type=int, default=16)
-    argp.add_argument('--buffer-size', type=int, default=65536)
-    argp.add_argument('--pre-down', action='store_true')
-    argp.add_argument('--color-augmentation', type=float, default=0.05)
-    argp.add_argument('--multistage-resize', type=int, default=2)
-    argp.add_argument('--random-resizer', type=int, default=0)
-    argp.add_argument('--noise-scale', type=float, default=0.01)
-    argp.add_argument('--noise-corr', type=float, default=0.75)
-    argp.add_argument('--jpeg-coding', type=float, default=2.0)
+    input_arguments(argp)
     # model parameters
-    argp.add_argument('--input-range', type=int, default=2)
-    argp.add_argument('--output-range', type=int, default=2)
-    argp.add_argument('--scaling', type=int, default=1)
-    argp.add_argument('--var-ema', type=float, default=0.999)
-    argp.add_argument('--generator-wd', type=float, default=1e-6)
-    argp.add_argument('--generator-lr', type=float, default=1e-3)
-    argp.add_argument('--generator-lr-step', type=int, default=1000)
+    SRN.add_arguments(argp)
     # parse
     args = argp.parse_args(argv)
     args.train_dir = args.train_dir.format(postfix=args.postfix)

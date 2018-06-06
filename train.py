@@ -35,6 +35,10 @@ class Train:
         # create training directory
         if not self.restore:
             if os.path.exists(self.train_dir):
+                eprint('Confirm removing {}\n[Y/n]'.format(self.train_dir))
+                if input() != 'Y':
+                    import sys
+                    sys.exit()
                 import shutil
                 shutil.rmtree(self.train_dir)
                 eprint('Removed: ' + self.train_dir)
@@ -200,28 +204,33 @@ def main(argv=None):
     argp = argparse.ArgumentParser()
     # training parameters
     argp.add_argument('dataset')
-    argp.add_argument('--num_epochs', type=int, default=24)
-    argp.add_argument('--max_steps', type=int) # 255000
-    argp.add_argument('--random_seed', type=int)
+    argp.add_argument('--num-epochs', type=int, default=24)
+    argp.add_argument('--max-steps', type=int)
+    argp.add_argument('--random-seed', type=int)
     argp.add_argument('--device', default='/gpu:0')
     argp.add_argument('--postfix', default='')
-    argp.add_argument('--pretrain_dir', default='')
-    argp.add_argument('--train_dir', default='./train{postfix}.tmp')
+    argp.add_argument('--pretrain-dir', default='')
+    argp.add_argument('--train-dir', default='./train{postfix}.tmp')
     argp.add_argument('--restore', action='store_true')
-    argp.add_argument('--save_steps', type=int, default=5000)
-    argp.add_argument('--ckpt_period', type=int, default=600)
-    argp.add_argument('--log_frequency', type=int, default=100)
-    argp.add_argument('--val_frequency', type=int, default=100)
+    argp.add_argument('--save-steps', type=int, default=5000)
+    argp.add_argument('--ckpt-period', type=int, default=600)
+    argp.add_argument('--log-frequency', type=int, default=100)
+    argp.add_argument('--val-frequency', type=int, default=100)
     argp.add_argument('--log-file', default='train.log')
     argp.add_argument('--batch-size', type=int, default=16)
     argp.add_argument('--val-size', type=int, default=32)
     # data parameters
+    argp.add_argument('--dtype', type=int, default=2)
+    argp.add_argument('--data-format', default='NCHW')
     argp.add_argument('--patch-height', type=int, default=192)
     argp.add_argument('--patch-width', type=int, default=192)
+    argp.add_argument('--in-channels', type=int, default=3)
+    argp.add_argument('--out-channels', type=int, default=3)
     # pre-processing parameters
     input_arguments(argp)
     # model parameters
     SRN.add_arguments(argp)
+    argp.add_argument('--scaling', type=int, default=1)
     # parse
     args = argp.parse_args(argv)
     args.train_dir = args.train_dir.format(postfix=args.postfix)

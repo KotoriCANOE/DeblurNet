@@ -43,15 +43,9 @@ class SRN:
     
     @staticmethod
     def add_arguments(argp):
-        # data parameters
-        argp.add_argument('--dtype', type=int, default=2)
-        argp.add_argument('--data-format', default='NCHW')
-        argp.add_argument('--in-channels', type=int, default=3)
-        argp.add_argument('--out-channels', type=int, default=3)
         # model parameters
         argp.add_argument('--input-range', type=int, default=2)
         argp.add_argument('--output-range', type=int, default=2)
-        argp.add_argument('--scaling', type=int, default=1)
         argp.add_argument('--var-ema', type=float, default=0.999)
         argp.add_argument('--generator-wd', type=float, default=1e-6)
         argp.add_argument('--generator-lr', type=float, default=1e-3)

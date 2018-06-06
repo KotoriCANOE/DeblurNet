@@ -76,7 +76,7 @@ class Train:
             with create_session() as sess:
                 self.val_inputs, self.val_labels = sess.run(val_data)
 
-    def build_train(self):
+    def build_graph(self):
         with tf.device('/cpu:0'):
             self.inputs, self.labels = inputs(
                 self.config, self.train_set, is_training=True)
@@ -152,7 +152,7 @@ class Train:
                 fd.write('{}\n'.format(datetime.now()))
                 fd.write(last_log + '\n\n')
 
-    def train(self, sess):
+    def run(self, sess):
         import time
         # restore from checkpoint
         if self.restore and os.path.exists(os.path.join(self.train_dir, 'checkpoint')):
@@ -193,10 +193,10 @@ class Train:
         self.initialize()
         self.get_dataset()
         with tf.Graph().as_default():
-            self.build_train()
+            self.build_graph()
             self.build_saver()
             with self.train_session() as sess:
-                self.train(sess)
+                self.run(sess)
 
 def main(argv=None):
     # arguments parsing

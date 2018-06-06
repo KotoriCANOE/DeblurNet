@@ -60,7 +60,6 @@ class Test:
         self.test_inputs = []
         self.test_labels = []
         with tf.Graph().as_default():
-            from copy import deepcopy
             with tf.device('/cpu:0'):
                 test_data = inputs(self.config, self.test_set, is_testing=True)
             with create_session() as sess:
@@ -69,14 +68,13 @@ class Test:
                     self.test_inputs.append(_inputs)
                     self.test_labels.append(_labels)
 
-    def build_test(self):
+    def build_graph(self):
         with tf.device(self.device):
             inputs = tf.placeholder(tf.float32, name='inputs')
             labels = tf.placeholder(tf.float32, name='labels')
             self.model = SRN(self.config)
             outputs = self.model.build_model(inputs)
             self.losses = list(test_losses(labels, outputs))
-            self.saver = tf.train.Saver(self.model.rvars)
         # post-processing for output
         with tf.device('/cpu:0'):
             # convert to NHWC format
@@ -88,8 +86,11 @@ class Test:
             self.pngs = (BatchPNG(inputs, self.batch_size)
                 + BatchPNG(labels, self.batch_size)
                 + BatchPNG(outputs, self.batch_size))
-    
-    def test_last(self, sess):
+
+    def build_saver(self):
+        self.saver = tf.train.Saver(self.model.rvars)
+
+    def run_last(self, sess):
         # latest checkpoint
         ckpt = tf.train.latest_checkpoint(self.train_dir)
         self.saver.restore(sess, ckpt)
@@ -130,7 +131,7 @@ class Test:
                 fd.write('{}\n'.format(datetime.now()))
                 fd.write(test_log + '\n\n')
 
-    def test_steps(self, sess):
+    def run_steps(self, sess):
         import re
         prefix = 'model_'
         # get checkpoints of every few steps
@@ -180,10 +181,11 @@ class Test:
         self.initialize()
         self.get_dataset()
         with tf.Graph().as_default():
-            self.build_test()
+            self.build_graph()
+            self.build_saver()
             with create_session() as sess:
-                self.test_last(sess)
-                self.test_steps(sess)
+                self.run_last(sess)
+                self.run_steps(sess)
 
 def main(argv=None):
     # arguments parsing

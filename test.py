@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 import os
 from utils import eprint, listdir_files, reset_random, create_session, BatchPNG
-from data import get_data, data_arguments
+from data import Data
 from model import SRN
 
 # losses measured for testing
@@ -16,7 +16,6 @@ def test_losses(ref, pred):
 # class for testing session
 class Test:
     def __init__(self, config):
-        self.dataset = None
         self.random_seed = None
         self.device = None
         self.postfix = None
@@ -49,24 +48,16 @@ class Test:
             reset_random(self.random_seed)
 
     def get_dataset(self):
-        files = listdir_files(self.dataset, filter_ext=['.npz'])
-        # testing set
-        self.epoch_steps = len(files) // self.batch_size
-        self.epoch_size = self.epoch_steps * self.batch_size
-        self.test_set = files[:self.epoch_size]
-        eprint('test set: {}\nepoch steps: {}\n'
-            .format(len(self.test_set), self.epoch_steps))
+        self.data = Data(self.config)
+        self.epoch_steps = self.data.epoch_steps
+        self.max_steps = self.data.max_steps
         # pre-computing testing set
         self.test_inputs = []
         self.test_labels = []
-        with tf.Graph().as_default():
-            with tf.device('/cpu:0'):
-                test_data = get_data(self.config, self.test_set)
-            with create_session() as sess:
-                for _ in range(self.epoch_steps):
-                    _inputs, _labels = sess.run(test_data)
-                    self.test_inputs.append(_inputs)
-                    self.test_labels.append(_labels)
+        data_gen = self.data.gen_main()
+        for _inputs, _labels in data_gen:
+            self.test_inputs.append(_inputs)
+            self.test_labels.append(_labels)
 
     def build_graph(self):
         with tf.device(self.device):
@@ -193,6 +184,7 @@ def main(argv=None):
     argp = argparse.ArgumentParser()
     # testing parameters
     argp.add_argument('dataset')
+    argp.add_argument('--num-epochs', type=int, default=1)
     argp.add_argument('--random-seed', type=int)
     argp.add_argument('--device', default='/gpu:0')
     argp.add_argument('--postfix', default='')
@@ -208,7 +200,7 @@ def main(argv=None):
     argp.add_argument('--in-channels', type=int, default=3)
     argp.add_argument('--out-channels', type=int, default=3)
     # pre-processing parameters
-    input_arguments(argp)
+    Data.add_arguments(argp)
     # model parameters
     SRN.add_arguments(argp)
     argp.add_argument('--scaling', type=int, default=1)

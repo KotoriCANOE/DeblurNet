@@ -2,16 +2,12 @@ import tensorflow as tf
 import numpy as np
 import os
 from utils import eprint, listdir_files, reset_random, create_session
-#from data import get_data, data_arguments
 from data import Data
 from model import SRN
 
 # class for training session
 class Train:
     def __init__(self, config):
-        self.dataset = None
-        self.num_epochs = None
-        self.max_steps = None
         self.random_seed = None
         self.device = None
         self.postfix = None
@@ -49,46 +45,14 @@ class Train:
             reset_random(self.random_seed)
 
     def get_dataset(self):
-        '''
-        files = listdir_files(self.dataset, filter_ext=['.npz'])
-        # validation set
-        self.val_set = files[:self.val_size]
-        files = files[self.val_size:]
-        # training set
-        self.epoch_steps = len(files) // self.batch_size
-        self.epoch_size = self.epoch_steps * self.batch_size
-        if self.max_steps is None:
-            self.max_steps = self.epoch_steps * self.num_epochs
-        else:
-            self.num_epochs = (self.max_steps + self.epoch_steps - 1) // self.epoch_steps
-            self.config.num_epochs = self.num_epochs
-        self.train_set = files[:self.epoch_size]
-        eprint('train set: {}\nepoch steps: {}\nnum epochs: {}\nmax steps: {}\n'
-            .format(len(self.train_set), self.epoch_steps, self.num_epochs, self.max_steps))
-        # pre-computing validation set
-        with tf.Graph().as_default():
-            from copy import deepcopy
-            val_config = deepcopy(self.config)
-            val_config.num_epochs = 1
-            val_config.batch_size = self.val_size
-            with tf.device('/cpu:0'):
-                val_data = get_data(val_config, self.val_set)
-            with create_session() as sess:
-                self.val_inputs, self.val_labels = sess.run(val_data)
-        '''
         self.data = Data(self.config)
         self.epoch_steps = self.data.epoch_steps
         self.max_steps = self.data.max_steps
-        self.num_epochs = self.data.num_epochs
         self.val_inputs, self.val_labels = self.data.get_val()
 
     def build_graph(self):
-        #with tf.device('/cpu:0'):
-        #    self.inputs, self.labels = get_data(self.config, self.train_set)
         with tf.device(self.device):
             self.model = SRN(self.config)
-            #self.g_loss, self.g_loss_main = self.model.build_train(
-            #    self.inputs, self.labels)
             self.g_loss, self.g_loss_main = self.model.build_train()
             self.global_step = tf.train.get_or_create_global_step()
             self.g_train_op = self.model.train(self.global_step)
@@ -272,8 +236,7 @@ def main(argv=None):
     argp.add_argument('--in-channels', type=int, default=3)
     argp.add_argument('--out-channels', type=int, default=3)
     # pre-processing parameters
-    #data_arguments(argp)
-    Data.add_argument(argp)
+    Data.add_arguments(argp)
     # model parameters
     SRN.add_arguments(argp)
     argp.add_argument('--scaling', type=int, default=1)

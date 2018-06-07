@@ -15,10 +15,9 @@ class SRN:
         self.data_format = DATA_FORMAT
         self.in_channels = 3
         self.out_channels = 3
-        self.input_shape = [None] * 4
-        self.output_shape = [None] * 4
-        self.input_shape[-3 if self.data_format == 'NCHW' else -1] = self.in_channels
-        self.output_shape[-3 if self.data_format == 'NCHW' else -1] = self.out_channels
+        self.batch_size = None
+        self.patch_height = None
+        self.patch_width = None
         # train parameters
         self.random_seed = None
         self.var_ema = 0.999
@@ -34,13 +33,20 @@ class SRN:
         # copy all the properties from config object
         if config is not None:
             self.__dict__.update(config.__dict__)
+        # internal parameters
+        if self.data_format == 'NCHW':
+            self.input_shape = [self.batch_size, self.in_channels, self.patch_height, self.patch_width]
+            self.output_shape = [self.batch_size, self.out_channels, self.patch_height, self.patch_width]
+        else:
+            self.input_shape = [self.batch_size, self.patch_height, self.patch_width, self.in_channels]
+            self.output_shape = [self.batch_size, self.patch_height, self.patch_width, self.out_channels]
         # create a moving average object for trainable variables
         if self.var_ema > 0:
             self.ema = tf.train.ExponentialMovingAverage(self.var_ema)
         # state
         self.training = tf.Variable(False, trainable=False, name='training',
             collections=[tf.GraphKeys.GLOBAL_VARIABLES, tf.GraphKeys.MODEL_VARIABLES])
-    
+
     @staticmethod
     def add_arguments(argp):
         # model parameters

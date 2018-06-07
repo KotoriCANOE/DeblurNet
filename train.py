@@ -2,7 +2,8 @@ import tensorflow as tf
 import numpy as np
 import os
 from utils import eprint, listdir_files, reset_random, create_session
-from input import inputs, input_arguments
+#from data import get_data, data_arguments
+from data import Data
 from model import SRN
 
 # class for training session
@@ -48,10 +49,8 @@ class Train:
             reset_random(self.random_seed)
 
     def get_dataset(self):
-        files = listdir_files(self.dataset, filter_ext=['.jpeg', '.jpg', '.png'])
-        # random shuffle
-        import random
-        random.shuffle(files)
+        '''
+        files = listdir_files(self.dataset, filter_ext=['.npz'])
         # validation set
         self.val_set = files[:self.val_size]
         files = files[self.val_size:]
@@ -70,20 +69,27 @@ class Train:
         with tf.Graph().as_default():
             from copy import deepcopy
             val_config = deepcopy(self.config)
+            val_config.num_epochs = 1
             val_config.batch_size = self.val_size
             with tf.device('/cpu:0'):
-                val_data = inputs(val_config, self.val_set, is_testing=True)
+                val_data = get_data(val_config, self.val_set)
             with create_session() as sess:
                 self.val_inputs, self.val_labels = sess.run(val_data)
+        '''
+        self.data = Data(self.config)
+        self.epoch_steps = self.data.epoch_steps
+        self.max_steps = self.data.max_steps
+        self.num_epochs = self.data.num_epochs
+        self.val_inputs, self.val_labels = self.data.get_val()
 
     def build_graph(self):
-        with tf.device('/cpu:0'):
-            self.inputs, self.labels = inputs(
-                self.config, self.train_set, is_training=True)
+        #with tf.device('/cpu:0'):
+        #    self.inputs, self.labels = get_data(self.config, self.train_set)
         with tf.device(self.device):
             self.model = SRN(self.config)
-            self.g_loss, self.g_loss_main = self.model.build_train(
-                self.inputs, self.labels)
+            #self.g_loss, self.g_loss_main = self.model.build_train(
+            #    self.inputs, self.labels)
+            self.g_loss, self.g_loss_main = self.model.build_train()
             self.global_step = tf.train.get_or_create_global_step()
             self.g_train_op = self.model.train(self.global_step)
             self.all_summary, self.loss_summary = self.model.get_summaries()
@@ -110,13 +116,15 @@ class Train:
         self.val_writer = tf.summary.FileWriter(self.train_dir + '/val')
         return create_session()
 
-    def run_sess(self, sess, global_step, options=None, run_metadata=None):
+    def run_sess(self, sess, global_step, data_gen, options=None, run_metadata=None):
         from datetime import datetime
         import time
         last_step = global_step + 1 >= self.max_steps
         epoch = global_step // self.epoch_steps
         # training
-        feed_dict = {'training:0': True}
+        inputs, labels = next(data_gen)
+        feed_dict = {'training:0': True,
+            'Input:0': inputs, 'Label:0': labels}
         if last_step or (self.log_frequency > 0 and
             global_step % self.log_frequency == 0):
             summary, g_loss, _ = sess.run((self.all_summary, self.g_loss,
@@ -135,8 +143,7 @@ class Train:
         # validation
         if last_step or (self.val_frequency > 0 and
             global_step % self.val_frequency == 0):
-            feed_dict = {self.inputs: self.val_inputs,
-                self.labels: self.val_labels}
+            feed_dict = {'Input:0': self.val_inputs, 'Label:0': self.val_labels}
             summary, g_loss_main = sess.run((self.loss_summary, self.g_loss_main), feed_dict)
             self.val_writer.add_summary(summary, global_step)
             val_log = '{}: epoch {}, step {}, val loss: {:.5}'\
@@ -172,6 +179,9 @@ class Train:
         # initialization
         self.log_last = time.time()
         ckpt_last = time.time()
+        # dataset generator
+        global_step = tf.train.global_step(sess, self.global_step)
+        data_gen = self.data.gen_main(global_step)
         # run training session
         while True:
             # global step
@@ -184,7 +194,7 @@ class Train:
                 # profiling every few steps
                 options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_meta = tf.RunMetadata()
-                self.run_sess(sess, global_step, options, run_meta)
+                self.run_sess(sess, global_step, data_gen, options, run_meta)
                 profiler.add_step(global_step, run_meta)
                 # profile the parameters
                 if global_step == profile_offset:
@@ -198,12 +208,11 @@ class Train:
                 profiler.profile_operations(builder(builder.time_and_memory())
                     .with_file_output(ofile).build())
                 # generate a timeline
-                timeline = os.path.join(self.train_dir,
-                    'timeline_{:0>7}.json'.format(global_step))
+                timeline = os.path.join(self.train_dir, 'timeline')
                 profiler.profile_graph(builder(builder.time_and_memory())
                     .with_timeline_output(timeline).build())
             else:
-                self.run_sess(sess, global_step)
+                self.run_sess(sess, global_step, data_gen)
             # save checkpoints periodically or when training finished
             if self.ckpt_period > 0:
                 time_current = time.time()
@@ -263,7 +272,8 @@ def main(argv=None):
     argp.add_argument('--in-channels', type=int, default=3)
     argp.add_argument('--out-channels', type=int, default=3)
     # pre-processing parameters
-    input_arguments(argp)
+    #data_arguments(argp)
+    Data.add_argument(argp)
     # model parameters
     SRN.add_arguments(argp)
     argp.add_argument('--scaling', type=int, default=1)

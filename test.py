@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 import os
 from utils import eprint, listdir_files, reset_random, create_session, BatchPNG
-from input import inputs, input_arguments
+from data import get_data, data_arguments
 from model import SRN
 
 # losses measured for testing
@@ -49,7 +49,7 @@ class Test:
             reset_random(self.random_seed)
 
     def get_dataset(self):
-        files = listdir_files(self.dataset, filter_ext=['.jpeg', '.jpg', '.png'])
+        files = listdir_files(self.dataset, filter_ext=['.npz'])
         # testing set
         self.epoch_steps = len(files) // self.batch_size
         self.epoch_size = self.epoch_steps * self.batch_size
@@ -61,7 +61,7 @@ class Test:
         self.test_labels = []
         with tf.Graph().as_default():
             with tf.device('/cpu:0'):
-                test_data = inputs(self.config, self.test_set, is_testing=True)
+                test_data = get_data(self.config, self.test_set)
             with create_session() as sess:
                 for _ in range(self.epoch_steps):
                     _inputs, _labels = sess.run(test_data)

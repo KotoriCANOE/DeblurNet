@@ -110,7 +110,7 @@ class Train:
         self.val_writer = tf.summary.FileWriter(self.train_dir + '/val')
         return create_session()
 
-    def run_sess(self, sess, global_step):
+    def run_sess(self, sess, global_step, options=None, run_metadata=None):
         from datetime import datetime
         import time
         last_step = global_step + 1 >= self.max_steps
@@ -120,7 +120,7 @@ class Train:
         if last_step or (self.log_frequency > 0 and
             global_step % self.log_frequency == 0):
             summary, g_loss, _ = sess.run((self.all_summary, self.g_loss,
-                self.g_train_op), feed_dict)
+                self.g_train_op), feed_dict, options, run_metadata)
             self.train_writer.add_summary(summary, global_step)
             time_current = time.time()
             duration = time_current - self.log_last
@@ -131,7 +131,7 @@ class Train:
                 .format(datetime.now(), epoch, global_step, g_loss, samples_sec, sec_batch)
             eprint(train_log)
         else:
-            sess.run((self.g_train_op), feed_dict)
+            sess.run((self.g_train_op), feed_dict, options, run_metadata)
         # validation
         if last_step or (self.val_frequency > 0 and
             global_step % self.val_frequency == 0):
@@ -164,6 +164,11 @@ class Train:
         # otherwise, initialize from start
         else:
             sess.run(tf.global_variables_initializer())
+        # profiler
+        profile_offset = 1000 + self.log_frequency // 2
+        profile_step = 10000
+        builder = tf.profiler.ProfileOptionBuilder
+        profiler = tf.profiler.Profiler(sess.graph)
         # initialization
         self.log_last = time.time()
         ckpt_last = time.time()
@@ -175,7 +180,30 @@ class Train:
                 eprint('Training finished at step={}'.format(global_step))
                 break
             # run session
-            self.run_sess(sess, global_step)
+            if global_step % profile_step == profile_offset:
+                # profiling every few steps
+                options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                run_meta = tf.RunMetadata()
+                self.run_sess(sess, global_step, options, run_meta)
+                profiler.add_step(global_step, run_meta)
+                # profile the parameters
+                if global_step == profile_offset:
+                    ofile = os.path.join(self.train_dir, 'parameters.log')
+                    profiler.profile_name_scope(
+                        builder(builder.trainable_variables_parameter())
+                        .with_file_output(ofile).build())
+                # profile the timing of model operations
+                ofile = os.path.join(self.train_dir,
+                    'time_and_memory_{:0>7}.log'.format(global_step))
+                profiler.profile_operations(builder(builder.time_and_memory())
+                    .with_file_output(ofile).build())
+                # generate a timeline
+                timeline = os.path.join(self.train_dir,
+                    'timeline_{:0>7}.json'.format(global_step))
+                profiler.profile_graph(builder(builder.time_and_memory())
+                    .with_timeline_output(timeline).build())
+            else:
+                self.run_sess(sess, global_step)
             # save checkpoints periodically or when training finished
             if self.ckpt_period > 0:
                 time_current = time.time()
@@ -188,6 +216,14 @@ class Train:
                 self.saver.save(sess, os.path.join(self.train_dir,
                     'model_{:0>7}'.format(global_step)),
                     write_meta_graph=False, write_state=False)
+        # auto detect problems and generate advice
+        ALL_ADVICE = {
+            'ExpensiveOperationChecker': {},
+            'AcceleratorUtilizationChecker': {},
+            'JobChecker': {},
+            'OperationChecker': {}
+        }
+        profiler.advise(ALL_ADVICE)
 
     def __call__(self):
         self.initialize()
@@ -217,13 +253,13 @@ def main(argv=None):
     argp.add_argument('--log-frequency', type=int, default=100)
     argp.add_argument('--val-frequency', type=int, default=100)
     argp.add_argument('--log-file', default='train.log')
-    argp.add_argument('--batch-size', type=int, default=16)
+    argp.add_argument('--batch-size', type=int, default=32)
     argp.add_argument('--val-size', type=int, default=32)
     # data parameters
     argp.add_argument('--dtype', type=int, default=2)
     argp.add_argument('--data-format', default='NCHW')
-    argp.add_argument('--patch-height', type=int, default=192)
-    argp.add_argument('--patch-width', type=int, default=192)
+    argp.add_argument('--patch-height', type=int, default=128)
+    argp.add_argument('--patch-width', type=int, default=128)
     argp.add_argument('--in-channels', type=int, default=3)
     argp.add_argument('--out-channels', type=int, default=3)
     # pre-processing parameters

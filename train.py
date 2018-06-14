@@ -96,8 +96,9 @@ class Train:
         fetch = (self.g_train_op, self.model.g_losses_acc)
         sess.run(fetch, feed_dict, options, run_metadata)
         # training - log summary
-        if self.log_frequency > 0 and global_step % self.log_frequency == 0:
-            fetch = [self.all_summary] + self.model.g_losses
+        if last_step or (self.log_frequency > 0 and
+            global_step % self.log_frequency == 0):
+            fetch = [self.all_summary] + self.model.g_log_losses
             summary, train_loss = sess.run(fetch, feed_dict)
             self.train_writer.add_summary(summary, global_step)
             time_current = time.time()
@@ -116,7 +117,7 @@ class Train:
                 feed_dict = {'Input:0': inputs, 'Label:0': labels}
                 fetch = [self.model.g_losses_acc]
                 sess.run(fetch, feed_dict)
-            fetch = [self.loss_summary] + self.model.g_losses
+            fetch = [self.loss_summary] + self.model.g_log_losses
             summary, val_loss = sess.run(fetch, feed_dict)
             self.val_writer.add_summary(summary, global_step)
             val_log = '{}: epoch {}, step {}, val loss: {:.5}'\

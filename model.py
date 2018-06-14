@@ -191,24 +191,25 @@ class SRN:
         return last
 
     def build_g_loss(self, ref, pred):
-        self.g_losses = []
+        self.g_log_losses = []
+        update_ops = []
         loss_key = self.generator_lkey
         with tf.variable_scope(loss_key):
             # L1 loss
             l1_loss = tf.losses.absolute_difference(ref, pred, 1.0)
-            self.loss_summary('l1_loss', l1_loss, self.g_losses)
+            update_ops.append(self.loss_summary('l1_loss', l1_loss, self.g_log_losses))
             # total loss
             losses = tf.losses.get_losses(loss_key)
             g_main_loss = tf.add_n(losses, 'g_main_loss')
             # regularization loss
             g_reg_losses = tf.losses.get_regularization_losses('generator')
             g_reg_loss = tf.add_n(g_reg_losses)
-            self.loss_summary('g_reg_loss', g_reg_loss)
+            update_ops.append(self.loss_summary('g_reg_loss', g_reg_loss))
             # final loss
             self.g_loss = g_main_loss + g_reg_loss
-            self.loss_summary('g_loss', self.g_loss)
+            update_ops.append(self.loss_summary('g_loss', self.g_loss))
             # accumulate operator
-            with tf.control_dependencies(self.g_losses):
+            with tf.control_dependencies(update_ops):
                 self.g_losses_acc = tf.no_op('g_losses_accumulator')
 
     def build_model(self, inputs=None):

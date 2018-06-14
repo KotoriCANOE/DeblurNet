@@ -34,18 +34,13 @@ class SRN:
         if config is not None:
             self.__dict__.update(config.__dict__)
         # internal parameters
-        if self.data_format == 'NCHW':
-            self.input_shape = [self.batch_size, self.in_channels, self.patch_height, self.patch_width]
-            self.output_shape = [self.batch_size, self.out_channels, self.patch_height, self.patch_width]
-        else:
-            self.input_shape = [self.batch_size, self.patch_height, self.patch_width, self.in_channels]
-            self.output_shape = [self.batch_size, self.patch_height, self.patch_width, self.out_channels]
+        self.input_shape = [None] * 4
+        self.input_shape[-3 if self.data_format == 'NCHW' else -1] = self.in_channels
+        self.output_shape = [None] * 4
+        self.output_shape[-3 if self.data_format == 'NCHW' else -1] = self.out_channels
         # create a moving average object for trainable variables
         if self.var_ema > 0:
             self.ema = tf.train.ExponentialMovingAverage(self.var_ema)
-        # state
-        self.training = tf.Variable(False, trainable=False, name='training',
-            collections=[tf.GraphKeys.GLOBAL_VARIABLES, tf.GraphKeys.MODEL_VARIABLES])
 
     @staticmethod
     def add_arguments(argp):
@@ -142,15 +137,18 @@ class SRN:
         # parameters
         main_scope = 'generator'
         format = self.data_format
-        activation = self.generator_acti
-        #normalizer = None
-        normalizer = lambda x: slim.batch_norm(x, 0.999, center=True, scale=True,
-            is_training=self.training, data_format=format, renorm=False)
-        regularizer = slim.l2_regularizer(self.generator_wd)
         var_key = self.generator_vkey
         # model definition
-        skips = []
         with tf.variable_scope(main_scope):
+            # state
+            self.g_training = tf.Variable(False, trainable=False, name='training',
+                collections=[tf.GraphKeys.GLOBAL_VARIABLES, tf.GraphKeys.MODEL_VARIABLES])
+            activation = self.generator_acti
+            normalizer = lambda x: slim.batch_norm(x, 0.999, center=True, scale=True,
+                is_training=self.g_training, data_format=format, renorm=False)
+            regularizer = slim.l2_regularizer(self.generator_wd)
+            skips = []
+            # network
             last = tf.identity(last, 'inputs')
             skips.append(last)
             with tf.variable_scope('InBlock'):
@@ -244,6 +242,9 @@ class SRN:
         return self.g_loss, g_loss_main
 
     def train(self, global_step):
+        # saving memory with gradient checkpoints
+        #self.set_reuse_checkpoints()
+        #g_ckpt = tf.get_collection('checkpoints', 'generator')
         # dependencies to be updated
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         # learning rate
@@ -253,6 +254,7 @@ class SRN:
         # optimizer
         g_opt = tf.contrib.opt.NadamOptimizer(g_lr)
         with tf.control_dependencies(update_ops):
+            #g_grads_vars = self.compute_gradients(self.g_loss, self.g_tvars, g_ckpt)
             g_grads_vars = g_opt.compute_gradients(self.g_loss, self.g_tvars)
             update_ops = [g_opt.apply_gradients(g_grads_vars, global_step)]
         # histogram for gradients and variables
@@ -276,3 +278,26 @@ class SRN:
         all_summary = tf.summary.merge_all()
         loss_summary = tf.summary.merge(self.loss_sums)
         return all_summary, loss_summary
+
+    @staticmethod
+    def set_reuse_checkpoints():
+        import re
+        # https://stackoverflow.com/a/36893840
+        # get the name of all the tensors output by weight operations
+        # MatMul, Conv2D, etc.
+        graph = tf.get_default_graph()
+        nodes = graph.as_graph_def().node
+        regex = re.compile(r'^.+(?:MatMul|Conv2D|conv2d_transpose|BiasAdd)$')
+        op_names = [n.name for n in nodes if re.match(regex, n.name)]
+        tensors = [graph.get_tensor_by_name(n + ':0') for n in op_names]
+        # add these tensors to collection 'checkpoints'
+        for tensor in tensors:
+            tf.add_to_collection('checkpoints', tensor)
+
+    @staticmethod
+    def compute_gradients(loss, var_list, checkpoints='collection'):
+        # https://github.com/openai/gradient-checkpointing
+        from memory_saving_gradients import gradients
+        grads = gradients(loss, var_list, checkpoints=checkpoints)
+        grads_vars = list(zip(grads, var_list))
+        return grads_vars

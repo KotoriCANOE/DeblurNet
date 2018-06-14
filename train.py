@@ -87,7 +87,7 @@ class Train:
         epoch = global_step // self.epoch_steps
         # training
         inputs, labels = next(data_gen)
-        feed_dict = {'training:0': True,
+        feed_dict = {self.model.g_training: True,
             'Input:0': inputs, 'Label:0': labels}
         if last_step or (self.log_frequency > 0 and
             global_step % self.log_frequency == 0):
@@ -134,7 +134,9 @@ class Train:
             self.saver_pt.restore(sess, os.path.join(self.pretrain_dir, 'model'))
         # otherwise, initialize from start
         else:
-            sess.run(tf.global_variables_initializer())
+            initializers = (tf.initializers.global_variables(),
+                tf.initializers.local_variables())
+            sess.run(initializers)
         # profiler
         profile_offset = 1000 + self.log_frequency // 2
         profile_step = 10000
@@ -174,7 +176,7 @@ class Train:
                 # generate a timeline
                 timeline = os.path.join(self.train_dir, 'timeline')
                 profiler.profile_graph(builder(builder.time_and_memory())
-                    .with_timeline_output(timeline).build())
+                    .with_step(global_step).with_timeline_output(timeline).build())
             else:
                 self.run_sess(sess, global_step, data_gen)
             # save checkpoints periodically or when training finished

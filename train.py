@@ -48,12 +48,16 @@ class Train:
         self.data = Data(self.config)
         self.epoch_steps = self.data.epoch_steps
         self.max_steps = self.data.max_steps
-        self.val_inputs, self.val_labels = self.data.get_val()
+        self.val_inputs = []
+        self.val_labels = []
+        for _inputs, _labels in self.data.get_val():
+            self.val_inputs.append(_inputs)
+            self.val_labels.append(_labels)
 
     def build_graph(self):
         with tf.device(self.device):
             self.model = SRN(self.config)
-            self.g_loss, self.g_loss_main = self.model.build_train()
+            self.g_loss = self.model.build_train()
             self.global_step = tf.train.get_or_create_global_step()
             self.g_train_op = self.model.train(self.global_step)
             self.all_summary, self.loss_summary = self.model.get_summaries()
@@ -85,14 +89,16 @@ class Train:
         import time
         last_step = global_step + 1 >= self.max_steps
         epoch = global_step // self.epoch_steps
-        # training
+        # training - train op
         inputs, labels = next(data_gen)
         feed_dict = {self.model.g_training: True,
             'Input:0': inputs, 'Label:0': labels}
-        if last_step or (self.log_frequency > 0 and
-            global_step % self.log_frequency == 0):
-            summary, g_loss, _ = sess.run((self.all_summary, self.g_loss,
-                self.g_train_op), feed_dict, options, run_metadata)
+        fetch = (self.g_train_op, self.model.g_losses_acc)
+        sess.run(fetch, feed_dict, options, run_metadata)
+        # training - log summary
+        if self.log_frequency > 0 and global_step % self.log_frequency == 0:
+            fetch = [self.all_summary] + self.model.g_losses
+            summary, train_loss = sess.run(fetch, feed_dict)
             self.train_writer.add_summary(summary, global_step)
             time_current = time.time()
             duration = time_current - self.log_last
@@ -100,23 +106,26 @@ class Train:
             sec_batch = duration / self.log_frequency if self.log_frequency > 0 else 0
             samples_sec = self.batch_size / sec_batch
             train_log = '{}: epoch {}, step {}, train loss: {:.5} ({:.1f} samples/sec, {:.3f} sec/batch)'\
-                .format(datetime.now(), epoch, global_step, g_loss, samples_sec, sec_batch)
+                .format(datetime.now(), epoch, global_step,
+                    train_loss, samples_sec, sec_batch)
             eprint(train_log)
-        else:
-            sess.run((self.g_train_op), feed_dict, options, run_metadata)
         # validation
         if last_step or (self.val_frequency > 0 and
             global_step % self.val_frequency == 0):
-            feed_dict = {'Input:0': self.val_inputs, 'Label:0': self.val_labels}
-            summary, g_loss_main = sess.run((self.loss_summary, self.g_loss_main), feed_dict)
+            for inputs, labels in zip(self.val_inputs, self.val_labels):
+                feed_dict = {'Input:0': inputs, 'Label:0': labels}
+                fetch = [self.model.g_losses_acc]
+                sess.run(fetch, feed_dict)
+            fetch = [self.loss_summary] + self.model.g_losses
+            summary, val_loss = sess.run(fetch, feed_dict)
             self.val_writer.add_summary(summary, global_step)
             val_log = '{}: epoch {}, step {}, val loss: {:.5}'\
-                .format(datetime.now(), epoch, global_step, g_loss_main)
+                .format(datetime.now(), epoch, global_step, val_loss)
             eprint(val_log)
         # log result for the last step
         if self.log_file and last_step:
             last_log = 'epoch {}, step {}, train loss: {:.5}, val loss: {:.5}'\
-                .format(epoch, global_step, g_loss, g_loss_main)
+                .format(epoch, global_step, train_loss, val_loss)
             with open(self.log_file, 'a', encoding='utf-8') as fd:
                 fd.write('Training No.{}\n'.format(self.postfix))
                 fd.write(self.train_dir + '\n')
@@ -229,7 +238,7 @@ def main(argv=None):
     argp.add_argument('--val-frequency', type=int, default=100)
     argp.add_argument('--log-file', default='train.log')
     argp.add_argument('--batch-size', type=int, default=32)
-    argp.add_argument('--val-size', type=int, default=32)
+    argp.add_argument('--val-size', type=int, default=256)
     # data parameters
     argp.add_argument('--dtype', type=int, default=2)
     argp.add_argument('--data-format', default='NCHW')

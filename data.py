@@ -1,5 +1,6 @@
 import tensorflow as tf
 import numpy as np
+import random
 from utils import eprint, listdir_files
 
 class Data:
@@ -67,7 +68,9 @@ class Data:
         labels = np.stack(labels)
         return inputs, labels
 
-    def _gen_batches(self, dataset, epoch_steps, num_epochs=1, start=0):
+    def _gen_batches(self, dataset, epoch_steps, num_epochs=1, start=0,
+        shuffle=False):
+        dataset = dataset.copy()
         max_steps = epoch_steps * num_epochs
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(self.threads) as executor:
@@ -77,10 +80,14 @@ class Data:
                 step_offset = epoch_steps * epoch
                 step_start = max(0, start - step_offset)
                 step_stop = min(epoch_steps, max_steps - step_offset)
+                # random shuffle
+                if shuffle:
+                    random.shuffle(dataset)
                 # loop over steps within an epoch
                 for step in range(step_start, step_stop):
                     offset = step * self.batch_size
-                    batch_set = dataset[offset : offset + self.batch_size]
+                    upper = min(len(dataset), offset + self.batch_size)
+                    batch_set = dataset[offset : upper]
                     futures.append(executor.submit(self.extract_batch, batch_set))
                     # yield the data beyond prefetch range
                     while len(futures) >= self.prefetch:
@@ -91,7 +98,9 @@ class Data:
                 yield future.result()
 
     def gen_main(self, start=0):
-        return self._gen_batches(self.main_set, self.epoch_steps, self.num_epochs, start)
+        return self._gen_batches(self.main_set, self.epoch_steps, self.num_epochs,
+            start, True)
 
     def get_val(self, start=0):
-        return self._gen_batches(self.val_set, self.val_steps, 1, start)
+        return self._gen_batches(self.val_set, self.val_steps, 1,
+            start, False)

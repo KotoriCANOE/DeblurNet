@@ -17,7 +17,6 @@ class Train:
         self.save_steps = None
         self.ckpt_period = None
         self.log_frequency = None
-        self.val_frequency = None
         self.log_file = None
         self.batch_size = None
         self.val_size = None
@@ -60,7 +59,7 @@ class Train:
             self.g_loss = self.model.build_train()
             self.global_step = tf.train.get_or_create_global_step()
             self.g_train_op = self.model.train(self.global_step)
-            self.all_summary, self.loss_summary = self.model.get_summaries()
+            self.train_summary, self.loss_summary = self.model.get_summaries()
 
     def build_saver(self):
         # a Saver object to restore the variables with mappings
@@ -87,46 +86,56 @@ class Train:
     def run_sess(self, sess, global_step, data_gen, options=None, run_metadata=None):
         from datetime import datetime
         import time
-        last_step = global_step + 1 >= self.max_steps
         epoch = global_step // self.epoch_steps
+        last_step = global_step + 1 >= self.max_steps
+        logging = last_step or (self.log_frequency > 0 and
+            global_step % self.log_frequency == 0)
         # training - train op
         inputs, labels = next(data_gen)
         feed_dict = {self.model.g_training: True,
             'Input:0': inputs, 'Label:0': labels}
-        fetch = (self.g_train_op, self.model.g_losses_acc)
-        sess.run(fetch, feed_dict, options, run_metadata)
-        # training - log summary
-        if last_step or (self.log_frequency > 0 and
-            global_step % self.log_frequency == 0):
-            fetch = [self.all_summary] + self.model.g_log_losses
-            summary, train_loss = sess.run(fetch, feed_dict)
+        if logging:
+            fetch = (self.train_summary, self.g_train_op, self.model.g_losses_acc)
+            summary, _, _ = sess.run(fetch, feed_dict, options, run_metadata)
             self.train_writer.add_summary(summary, global_step)
+        else:
+            fetch = (self.g_train_op, self.model.g_losses_acc)
+            sess.run(fetch, feed_dict, options, run_metadata)
+        # training - log summary
+        if logging:
+            # loss summary
+            fetch = [self.loss_summary] + self.model.g_log_losses
+            summary, train_loss = sess.run(fetch)
+            self.train_writer.add_summary(summary, global_step)
+            # logging
             time_current = time.time()
             duration = time_current - self.log_last
             self.log_last = time_current
             sec_batch = duration / self.log_frequency if self.log_frequency > 0 else 0
             samples_sec = self.batch_size / sec_batch
-            train_log = '{}: epoch {}, step {}, train loss: {:.5} ({:.1f} samples/sec, {:.3f} sec/batch)'\
+            train_log = ('{}: epoch {}, step {}, train loss: {:.5}'
+                ' ({:.1f} samples/sec, {:.3f} sec/batch)'
                 .format(datetime.now(), epoch, global_step,
-                    train_loss, samples_sec, sec_batch)
+                    train_loss, samples_sec, sec_batch))
             eprint(train_log)
         # validation
-        if last_step or (self.val_frequency > 0 and
-            global_step % self.val_frequency == 0):
+        if logging:
             for inputs, labels in zip(self.val_inputs, self.val_labels):
                 feed_dict = {'Input:0': inputs, 'Label:0': labels}
                 fetch = [self.model.g_losses_acc]
                 sess.run(fetch, feed_dict)
+            # loss summary
             fetch = [self.loss_summary] + self.model.g_log_losses
-            summary, val_loss = sess.run(fetch, feed_dict)
+            summary, val_loss = sess.run(fetch)
             self.val_writer.add_summary(summary, global_step)
-            val_log = '{}: epoch {}, step {}, val loss: {:.5}'\
-                .format(datetime.now(), epoch, global_step, val_loss)
+            # logging
+            val_log = ('{}: epoch {}, step {}, val loss: {:.5}'
+                .format(datetime.now(), epoch, global_step, val_loss))
             eprint(val_log)
         # log result for the last step
         if self.log_file and last_step:
-            last_log = 'epoch {}, step {}, train loss: {:.5}, val loss: {:.5}'\
-                .format(epoch, global_step, train_loss, val_loss)
+            last_log = ('epoch {}, step {}, train loss: {:.5}, val loss: {:.5}'
+                .format(epoch, global_step, train_loss, val_loss))
             with open(self.log_file, 'a', encoding='utf-8') as fd:
                 fd.write('Training No.{}\n'.format(self.postfix))
                 fd.write(self.train_dir + '\n')
@@ -236,7 +245,6 @@ def main(argv=None):
     argp.add_argument('--save-steps', type=int, default=5000)
     argp.add_argument('--ckpt-period', type=int, default=600)
     argp.add_argument('--log-frequency', type=int, default=100)
-    argp.add_argument('--val-frequency', type=int, default=100)
     argp.add_argument('--log-file', default='train.log')
     argp.add_argument('--batch-size', type=int, default=32)
     argp.add_argument('--val-size', type=int, default=256)

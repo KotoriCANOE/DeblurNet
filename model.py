@@ -29,6 +29,7 @@ class SRN:
         self.generator_vkey = 'generator_var'
         self.generator_lkey = 'generator_loss'
         # collections
+        self.train_sums = []
         self.loss_sums = []
         # copy all the properties from config object
         if config is not None:
@@ -256,7 +257,7 @@ class SRN:
         # learning rate
         g_lr = tf.train.cosine_decay_restarts(self.generator_lr,
             global_step, self.generator_lr_step)
-        tf.summary.scalar('generator_lr', g_lr)
+        self.train_sums.append(tf.summary.scalar('generator_lr', g_lr))
         # optimizer
         g_opt = tf.contrib.opt.NadamOptimizer(g_lr)
         with tf.control_dependencies(update_ops):
@@ -265,8 +266,8 @@ class SRN:
             update_ops = [g_opt.apply_gradients(g_grads_vars, global_step)]
         # histogram for gradients and variables
         for grad, var in g_grads_vars:
-            tf.summary.histogram(var.op.name + '/grad', grad)
-            tf.summary.histogram(var.op.name, var)
+            self.train_sums.append(tf.summary.histogram(var.op.name + '/grad', grad))
+            self.train_sums.append(tf.summary.histogram(var.op.name, var))
         # save moving average of trainalbe variables
         if self.var_ema > 0:
             with tf.variable_scope('variables_ema'):
@@ -304,9 +305,9 @@ class SRN:
                 return tf.identity(loss, 'loss')
 
     def get_summaries(self):
-        all_summary = tf.summary.merge_all()
+        train_summary = tf.summary.merge(self.train_sums)
         loss_summary = tf.summary.merge(self.loss_sums)
-        return all_summary, loss_summary
+        return train_summary, loss_summary
 
     @staticmethod
     def set_reuse_checkpoints():

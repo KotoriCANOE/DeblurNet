@@ -288,8 +288,11 @@ class SRN:
             # accumulate to sum and count
             acc_sum = loss_sum.assign_add(loss, True)
             acc_count = loss_count.assign_add(1.0, True)
-            # calculate mean, reset sum and count
+            # calculate mean
             loss_mean = tf.divide(loss_sum, loss_count, 'mean')
+            if collection is not None:
+                collection.append(loss_mean)
+            # reset sum and count
             with tf.control_dependencies([loss_mean]):
                 clear_sum = loss_sum.assign(0.0, True)
                 clear_count = loss_count.assign(0.0, True)
@@ -298,10 +301,7 @@ class SRN:
                 self.loss_sums.append(tf.summary.scalar(name, loss_mean))
             # return after updating sum and count
             with tf.control_dependencies([acc_sum, acc_count]):
-                loss = tf.identity(loss, 'loss')
-                if collection is not None:
-                    collection.append(loss)
-                return loss
+                return tf.identity(loss, 'loss')
 
     def get_summaries(self):
         all_summary = tf.summary.merge_all()

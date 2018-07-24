@@ -101,6 +101,6 @@ class Data:
         return self._gen_batches(self.main_set, self.epoch_steps, self.num_epochs,
             start, True)
 
-    def get_val(self, start=0):
+    def gen_val(self, start=0):
         return self._gen_batches(self.val_set, self.val_steps, 1,
             start, False)

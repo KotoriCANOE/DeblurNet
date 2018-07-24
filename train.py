@@ -36,7 +36,7 @@ class Train:
                     import sys
                     sys.exit()
                 import shutil
-                shutil.rmtree(self.train_dir)
+                shutil.rmtree(self.train_dir, ignore_errors=True)
                 eprint('Removed: ' + self.train_dir)
             os.makedirs(self.train_dir)
         # set deterministic random seed
@@ -47,9 +47,10 @@ class Train:
         self.data = Data(self.config)
         self.epoch_steps = self.data.epoch_steps
         self.max_steps = self.data.max_steps
+        # pre-computing validation set
         self.val_inputs = []
         self.val_labels = []
-        for _inputs, _labels in self.data.get_val():
+        for _inputs, _labels in self.data.gen_val():
             self.val_inputs.append(_inputs)
             self.val_labels.append(_labels)
 

@@ -70,7 +70,7 @@ class Data:
 
     def _gen_batches(self, dataset, epoch_steps, num_epochs=1, start=0,
         shuffle=False):
-        dataset = dataset.copy()
+        _dataset = dataset
         max_steps = epoch_steps * num_epochs
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(self.threads) as executor:
@@ -82,12 +82,13 @@ class Data:
                 step_stop = min(epoch_steps, max_steps - step_offset)
                 # random shuffle
                 if shuffle:
-                    random.shuffle(dataset)
+                    _dataset = dataset.copy()
+                    random.shuffle(_dataset)
                 # loop over steps within an epoch
                 for step in range(step_start, step_stop):
                     offset = step * self.batch_size
-                    upper = min(len(dataset), offset + self.batch_size)
-                    batch_set = dataset[offset : upper]
+                    upper = min(len(_dataset), offset + self.batch_size)
+                    batch_set = _dataset[offset : upper]
                     futures.append(executor.submit(self.extract_batch, batch_set))
                     # yield the data beyond prefetch range
                     while len(futures) >= self.prefetch:

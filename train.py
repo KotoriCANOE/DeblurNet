@@ -94,12 +94,12 @@ class Train:
         inputs, labels = next(data_gen)
         feed_dict = {self.model.g_training: True,
             'Input:0': inputs, 'Label:0': labels}
+        fetch = [self.g_train_op, self.model.g_losses_acc]
         if logging:
-            fetch = (self.train_summary, self.g_train_op, self.model.g_losses_acc)
-            summary, _, _ = sess.run(fetch, feed_dict, options, run_metadata)
+            fetch += [self.train_summary]
+            _, _, summary = sess.run(fetch, feed_dict, options, run_metadata)
             self.train_writer.add_summary(summary, global_step)
         else:
-            fetch = (self.g_train_op, self.model.g_losses_acc)
             sess.run(fetch, feed_dict, options, run_metadata)
         # training - log summary
         if logging:

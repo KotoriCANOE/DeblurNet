@@ -1,5 +1,4 @@
 import tensorflow as tf
-import numpy as numpy
 import os
 from utils import eprint, create_session
 from model import SRN
@@ -26,7 +25,7 @@ class Graph:
                 import sys
                 sys.exit()
             import shutil
-            shutil.rmtree(self.model_dir)
+            shutil.rmtree(self.model_dir, ignore_errors=True)
             eprint('Removed: ' + self.model_dir)
         os.makedirs(self.model_dir)
 
@@ -65,7 +64,6 @@ def main(argv=None):
     import argparse
     argp = argparse.ArgumentParser()
     # testing parameters
-    argp.add_argument('dataset')
     argp.add_argument('--postfix', default='')
     argp.add_argument('--train-dir', default='./train{postfix}.tmp')
     argp.add_argument('--model-dir', default='./model{postfix}.tmp')

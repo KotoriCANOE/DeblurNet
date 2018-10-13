@@ -40,7 +40,7 @@ class Test:
                 import sys
                 sys.exit()
             import shutil
-            shutil.rmtree(self.test_dir)
+            shutil.rmtree(self.test_dir, ignore_errors=True)
             eprint('Removed: ' + self.test_dir)
         os.makedirs(self.test_dir)
         # set deterministic random seed
@@ -79,6 +79,7 @@ class Test:
                 + BatchPNG(outputs, self.batch_size))
 
     def build_saver(self):
+        # a Saver object to restore the variables with mappings
         self.saver = tf.train.Saver(self.model.rvars)
 
     def run_last(self, sess):

@@ -229,6 +229,8 @@ class SRN:
             self.outputs = tf.multiply(self.outputs + 1, 0.5, name='Output')
         else:
             self.outputs = tf.identity(self.outputs, name='Output')
+        # all the saver variables
+        self.svars = self.g_svars
         # all the restore variables
         self.rvars = self.g_rvars
         # return outputs

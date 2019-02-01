@@ -1,6 +1,11 @@
 import tensorflow as tf
 import numpy as np
 
+def bool_argument(argp, name, default):
+    argp.add_argument('--' + name, dest=name, action='store_true')
+    argp.add_argument('--no-' + name, dest=name, action='store_false')
+    eval('argp.set_defaults({}={})'.format(name, 'True' if default else 'False'))
+
 # stderr print
 def eprint(*args, **kwargs):
     import sys
@@ -85,12 +90,16 @@ def reset_random(seed=0):
     np.random.seed(seed)
 
 # setup tensorflow and return session
-def create_session():
+def create_session(graph=None, debug=False):
     # create session
     gpu_options = tf.GPUOptions(allow_growth=True)
     config = tf.ConfigProto(gpu_options=gpu_options,
         allow_soft_placement=True, log_device_placement=False)
-    return tf.Session(config=config)
+    sess = tf.Session(graph=graph, config=config)
+    if debug:
+        from tensorflow.python import debug as tfdbg
+        sess = tfdbg.LocalCLIDebugWrapperSession(sess)
+    return sess
 
 # encode a batch of images to a list of pngs
 def BatchPNG(images, batch_size, dtype=tf.uint8):

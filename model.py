@@ -152,7 +152,6 @@ class SRN:
             regularizer = slim.l2_regularizer(self.generator_wd)
             skips = []
             # network
-            last = tf.identity(last, 'inputs')
             skips.append(last)
             with tf.variable_scope('InBlock'):
                 last = self.InBlock(last, 32, 3, 1, format, activation,
@@ -177,7 +176,6 @@ class SRN:
                 last = self.OutBlock(last, 32, self.out_channels, 3, 1, format, activation,
                     normalizer, regularizer, var_key)
                 last += skips.pop()
-            last = tf.identity(last, 'outputs')
         # trainable/model/save/restore variables
         self.g_tvars = tf.trainable_variables(main_scope)
         self.g_mvars = tf.model_variables(main_scope)

@@ -1,13 +1,14 @@
 import tensorflow as tf
 import numpy as np
 import os
-from utils import eprint, listdir_files, reset_random, create_session
-from data import Data
-from model import SRN
+from utils import bool_argument, eprint, reset_random, create_session
+from data import DataImage as Data
+from model import Model
 
 # class for training session
 class Train:
     def __init__(self, config):
+        self.debug = None
         self.random_seed = None
         self.device = None
         self.postfix = None
@@ -19,7 +20,9 @@ class Train:
         self.log_frequency = None
         self.log_file = None
         self.batch_size = None
-        self.val_size = None
+        # dataset
+        self.num_epochs = None
+        self.max_steps = None
         # copy all the properties from config object
         self.config = config
         self.__dict__.update(config.__dict__)
@@ -38,7 +41,8 @@ class Train:
                 import shutil
                 shutil.rmtree(self.train_dir, ignore_errors=True)
                 eprint('Removed: ' + self.train_dir)
-            os.makedirs(self.train_dir)
+            if not os.path.exists(self.train_dir):
+                os.makedirs(self.train_dir)
         # set deterministic random seed
         if self.random_seed is not None:
             reset_random(self.random_seed)
@@ -56,11 +60,11 @@ class Train:
 
     def build_graph(self):
         with tf.device(self.device):
-            self.model = SRN(self.config)
-            self.g_loss = self.model.build_train()
+            self.model = Model(self.config)
+            self.model.build_train()
             self.global_step = tf.train.get_or_create_global_step()
-            self.g_train_op = self.model.train(self.global_step)
-            self.train_summary, self.loss_summary = self.model.get_summaries()
+            self.g_train_op = self.model.train_g(self.global_step)
+            self.g_train_summary, self.loss_summary = self.model.get_summaries()
 
     def build_saver(self):
         # a Saver object to restore the variables with mappings
@@ -68,7 +72,7 @@ class Train:
         if self.pretrain_dir and not self.restore:
             self.saver_pt = tf.train.Saver(self.model.rvars)
         # a Saver object to save recent checkpoints
-        self.saver_ckpt = tf.train.Saver(max_to_keep=5,
+        self.saver_ckpt = tf.train.Saver(max_to_keep=24,
             save_relative_paths=True)
         # a Saver object to save the variables without mappings
         # used for saving checkpoints throughout the entire training progress
@@ -78,11 +82,11 @@ class Train:
         self.saver.export_meta_graph(os.path.join(self.train_dir, 'model.meta'),
             as_text=False, clear_devices=True, clear_extraneous_savers=True)
 
-    def train_session(self):
+    def create_session(self):
         self.train_writer = tf.summary.FileWriter(self.train_dir + '/train',
             tf.get_default_graph(), max_queue=20, flush_secs=120)
         self.val_writer = tf.summary.FileWriter(self.train_dir + '/val')
-        return create_session()
+        return create_session(debug=self.debug)
 
     def run_sess(self, sess, global_step, data_gen, options=None, run_metadata=None):
         from datetime import datetime
@@ -91,52 +95,53 @@ class Train:
         last_step = global_step + 1 >= self.max_steps
         logging = last_step or (self.log_frequency > 0 and
             global_step % self.log_frequency == 0)
-        # training - train op
-        inputs, labels = next(data_gen)
-        feed_dict = {self.model.g_training: True,
-            'Input:0': inputs, 'Label:0': labels}
-        fetch = [self.g_train_op, self.model.g_losses_acc]
+        # training - g train op
+        _inputs, _labels = next(data_gen)
+        feed_dict = {self.model.generator.training: True,
+            'Input:0': _inputs, 'Label:0': _labels}
+        fetches = [self.g_train_op, self.model.g_losses_acc]
         if logging:
-            fetch += [self.train_summary]
-            _, _, summary = sess.run(fetch, feed_dict, options, run_metadata)
+            fetches += [self.g_train_summary]
+            _, _, summary = sess.run(fetches, feed_dict, options, run_metadata)
             self.train_writer.add_summary(summary, global_step)
         else:
-            sess.run(fetch, feed_dict, options, run_metadata)
+            sess.run(fetches, feed_dict, options, run_metadata)
         # training - log summary
         if logging:
             # loss summary
-            fetch = [self.loss_summary] + self.model.g_log_losses
-            summary, train_loss = sess.run(fetch)
-            self.train_writer.add_summary(summary, global_step)
+            fetches = [self.loss_summary] + self.model.g_log_losses
+            train_ret = sess.run(fetches)
+            self.train_writer.add_summary(train_ret[0], global_step)
             # logging
             time_current = time.time()
             duration = time_current - self.log_last
             self.log_last = time_current
             sec_batch = duration / self.log_frequency if self.log_frequency > 0 else 0
             samples_sec = self.batch_size / sec_batch
-            train_log = ('{}: epoch {}, step {}, train loss: {:.5}'
+            train_log = ('{}: (train) epoch {}, step {}: losses: {}'
                 ' ({:.1f} samples/sec, {:.3f} sec/batch)'
                 .format(datetime.now(), epoch, global_step,
-                    train_loss, samples_sec, sec_batch))
+                    train_ret[1:], samples_sec, sec_batch))
             eprint(train_log)
         # validation
         if logging:
-            for inputs, labels in zip(self.val_inputs, self.val_labels):
-                feed_dict = {'Input:0': inputs, 'Label:0': labels}
-                fetch = [self.model.g_losses_acc]
-                sess.run(fetch, feed_dict)
+            for _inputs, _labels in zip(
+                self.val_inputs, self.val_labels):
+                feed_dict = {'Input:0': _inputs, 'Label:0': _labels}
+                fetches = [self.model.g_losses_acc]
+                sess.run(fetches, feed_dict)
             # loss summary
-            fetch = [self.loss_summary] + self.model.g_log_losses
-            summary, val_loss = sess.run(fetch)
-            self.val_writer.add_summary(summary, global_step)
+            fetches = [self.loss_summary] + self.model.g_log_losses
+            val_ret = sess.run(fetches)
+            self.val_writer.add_summary(val_ret[0], global_step)
             # logging
-            val_log = ('{}: epoch {}, step {}, val loss: {:.5}'
-                .format(datetime.now(), epoch, global_step, val_loss))
+            val_log = ('{} (val) epoch {}, step {}: losses: {}'
+                .format(datetime.now(), epoch, global_step, val_ret[1:]))
             eprint(val_log)
         # log result for the last step
         if self.log_file and last_step:
-            last_log = ('epoch {}, step {}, train loss: {:.5}, val loss: {:.5}'
-                .format(epoch, global_step, train_loss, val_loss))
+            last_log = ('epoch {}, step {}, losses: {}'
+                .format(epoch, global_step, val_ret[1:]))
             with open(self.log_file, 'a', encoding='utf-8') as fd:
                 fd.write('Training No.{}\n'.format(self.postfix))
                 fd.write(self.train_dir + '\n')
@@ -149,16 +154,17 @@ class Train:
         if self.restore and os.path.exists(os.path.join(self.train_dir, 'checkpoint')):
             lastest_ckpt = tf.train.latest_checkpoint(self.train_dir, 'checkpoint')
             self.saver_ckpt.restore(sess, lastest_ckpt)
-        # restore pre-trained model
-        elif self.pretrain_dir:
-            self.saver_pt.restore(sess, os.path.join(self.pretrain_dir, 'model'))
         # otherwise, initialize from start
         else:
             initializers = (tf.initializers.global_variables(),
                 tf.initializers.local_variables())
             sess.run(initializers)
+        # restore pre-trained model
+        if self.pretrain_dir:
+            latest_ckpt = tf.train.latest_checkpoint(self.pretrain_dir, 'checkpoint')
+            self.saver_pt.restore(sess, latest_ckpt)
         # profiler
-        profile_offset = 1000 + self.log_frequency // 2
+        profile_offset = 100 + self.log_frequency // 2
         profile_step = 10000
         builder = tf.profiler.ProfileOptionBuilder
         profiler = tf.profiler.Profiler(sess.graph)
@@ -226,7 +232,7 @@ class Train:
         with tf.Graph().as_default():
             self.build_graph()
             self.build_saver()
-            with self.train_session() as sess:
+            with self.create_session() as sess:
                 self.run(sess)
 
 def main(argv=None):
@@ -235,6 +241,7 @@ def main(argv=None):
     argp = argparse.ArgumentParser()
     # training parameters
     argp.add_argument('dataset')
+    bool_argument(argp, 'debug', False)
     argp.add_argument('--num-epochs', type=int, default=24)
     argp.add_argument('--max-steps', type=int)
     argp.add_argument('--random-seed', type=int)
@@ -244,10 +251,10 @@ def main(argv=None):
     argp.add_argument('--train-dir', default='./train{postfix}.tmp')
     argp.add_argument('--restore', action='store_true')
     argp.add_argument('--save-steps', type=int, default=5000)
-    argp.add_argument('--ckpt-period', type=int, default=600)
+    argp.add_argument('--ckpt-period', type=int, default=3600)
     argp.add_argument('--log-frequency', type=int, default=100)
     argp.add_argument('--log-file', default='train.log')
-    argp.add_argument('--batch-size', type=int, default=32)
+    argp.add_argument('--batch-size', type=int)
     argp.add_argument('--val-size', type=int, default=256)
     # data parameters
     argp.add_argument('--dtype', type=int, default=2)
@@ -257,12 +264,13 @@ def main(argv=None):
     argp.add_argument('--in-channels', type=int, default=3)
     argp.add_argument('--out-channels', type=int, default=3)
     # pre-processing parameters
-    Data.add_arguments(argp)
+    Data.add_arguments(argp, False)
     # model parameters
-    SRN.add_arguments(argp)
+    Model.add_arguments(argp)
     argp.add_argument('--scaling', type=int, default=1)
     # parse
     args = argp.parse_args(argv)
+    Data.parse_arguments(args)
     args.train_dir = args.train_dir.format(postfix=args.postfix)
     args.dtype = [tf.int8, tf.float16, tf.float32, tf.float64][args.dtype]
     # run training

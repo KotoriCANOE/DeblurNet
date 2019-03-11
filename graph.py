@@ -1,13 +1,14 @@
 import tensorflow as tf
 import os
 from utils import eprint, create_session
-from model import SRN
+from model import Model
 
 class Graph:
     def __init__(self, config):
         self.postfix = None
         self.train_dir = None
         self.model_dir = None
+        self.model_file = None
         # copy all the properties from config object
         self.config = config
         self.__dict__.update(config.__dict__)
@@ -30,7 +31,7 @@ class Graph:
         os.makedirs(self.model_dir)
 
     def build_graph(self):
-        self.model = SRN(self.config)
+        self.model = Model(self.config)
         self.model.build_model()
 
     def build_saver(self):
@@ -43,8 +44,13 @@ class Graph:
         # save the GraphDef
         tf.train.write_graph(tf.get_default_graph(), self.model_dir,
             'model.graphdef', as_text=True)
-        # restore variables from checkpoint
-        self.saver_r.restore(sess, tf.train.latest_checkpoint(self.train_dir))
+        # latest checkpoint or specific model
+        if self.model_file is None:
+            ckpt = tf.train.latest_checkpoint(self.train_dir)
+        else:
+            ckpt = os.path.join(self.train_dir, self.model_file)
+        eprint('Loading model: {}'.format(ckpt))
+        self.saver_r.restore(sess, ckpt)
         # save the model parameters
         self.saver_s.export_meta_graph(os.path.join(self.model_dir, 'model.meta'),
             as_text=False, clear_devices=True, clear_extraneous_savers=True)
@@ -67,13 +73,14 @@ def main(argv=None):
     argp.add_argument('--postfix', default='')
     argp.add_argument('--train-dir', default='./train{postfix}.tmp')
     argp.add_argument('--model-dir', default='./model{postfix}.tmp')
+    argp.add_argument('--model-file')
     # data parameters
     argp.add_argument('--dtype', type=int, default=2)
     argp.add_argument('--data-format', default='NCHW')
     argp.add_argument('--in-channels', type=int, default=3)
     argp.add_argument('--out-channels', type=int, default=3)
     # model parameters
-    SRN.add_arguments(argp)
+    Model.add_arguments(argp)
     argp.add_argument('--scaling', type=int, default=1)
     # parse
     args = argp.parse_args(argv)

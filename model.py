@@ -104,8 +104,8 @@ class Model:
         lr_base = 1e-3
         lr_step = 1000
         lr = tf.train.cosine_decay_restarts(lr_base,
-            global_step, lr_step, t_mul=2.0, m_mul=1.0, alpha=1e-1)
-        lr = tf.train.exponential_decay(lr, global_step, 1000, 0.999)
+            global_step, lr_step, t_mul=2.0, m_mul=0.9, alpha=1e-1)
+        lr = tf.train.exponential_decay(lr, global_step, 1000, 0.997)
         self.g_train_sums.append(tf.summary.scalar('Generator/LR', lr))
         # optimizer
         opt = tf.train.AdamOptimizer(lr, beta1=0.9, beta2=0.999)

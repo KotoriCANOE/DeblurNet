@@ -1,0 +1,75 @@
+# SRN-DeblurNet Note
+
+## 20
+
+steps: 127000
+Generator - Norm: Instance
+cosine restart: t_mul=2.0, m_mul=1.0, alpha=0.1
+exponential decay: 0.999^(step/1000)
+
+## 21
+
+steps: 127000
+cosine restart: t_mul=2.0, m_mul=0.9, alpha=0.1
+exponential decay: 0.997^(step/1000)
+
+## 22
+
+Generator - Norm: Batch
+(FusedBatchNorm faster than InstanceNorm but slightly worse)
+
+## 23
+
+Generator - Norm: None
+
+## 24
+
+(unchanged)
+Activation: Swish => ReLU
+
+## 25
+
+lr: 5e-4
+
+## 26
+
+(unchanged)
+remove SEUnit in ResBlock
+lr: 5e-4
+
+## 27
+
+lr: 1e-3
+same as ##23
+
+## 28
+
+replace L2 regularizer + Adam with AdamW
+lr: 1e-3
+wd: 1e-4
+
+## 29~34
+
+steps: 31000
+wd: 1e-3, 5e-4, 2e-4, 1e-4, 5e-5, 2e-5
+(chose 5e-5)
+
+## 33.2
+
+steps: 127000
+
+## 35,36,33,37,38,39
+
+steps: 31000
+lr: 5e-3, 2e-3, 1e-3, 5e-4, 2e-4, 1e-4
+(chose 1e-3)
+
+## 40,33,41,42
+
+batch size: 48,32,20,16
+
+## 43
+
+steps: 255000
+batch size: 16
+

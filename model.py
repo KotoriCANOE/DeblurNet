@@ -13,6 +13,9 @@ class Model:
         self.data_format = DATA_FORMAT
         self.in_channels = 3
         self.out_channels = 3
+        # train parameters
+        self.learning_rate = None
+        self.weight_decay = None
         # collections
         self.g_train_sums = []
         self.loss_sums = []
@@ -31,6 +34,8 @@ class Model:
         # format parameters
         argp.add_argument('--input-range', type=int, default=2)
         argp.add_argument('--output-range', type=int, default=2)
+        argp.add_argument('--learning-rate', type=float, default=1e-3)
+        argp.add_argument('--weight-decay', type=float, default=5e-5)
         # training parameters
         argp.add_argument('--var-ema', type=float, default=0.999)
 
@@ -69,8 +74,6 @@ class Model:
         self.build_model(inputs)
         # build generator loss
         self.build_g_loss(self.labels, self.outputs)
-        # return total loss
-        return self.g_loss
 
     def build_g_loss(self, labels, outputs):
         self.g_log_losses = []
@@ -82,15 +85,14 @@ class Model:
                 loss_collection=None)
             tf.losses.add_loss(l1_loss)
             update_ops.append(self.loss_summary('l1_loss', l1_loss, self.g_log_losses))
-            # total loss
-            losses = tf.losses.get_losses(loss_key)
-            main_loss = tf.add_n(losses, 'main_loss')
             # regularization loss
             reg_losses = tf.losses.get_regularization_losses('Generator')
             reg_loss = tf.add_n(reg_losses)
+            # tf.losses.add_loss(reg_loss)
             update_ops.append(self.loss_summary('reg_loss', reg_loss))
             # final loss
-            self.g_loss = main_loss + reg_loss
+            losses = tf.losses.get_losses(loss_key)
+            self.g_loss = tf.add_n(losses, 'total_loss')
             update_ops.append(self.loss_summary('loss', self.g_loss))
             # accumulate operator
             with tf.control_dependencies(update_ops):
@@ -101,14 +103,16 @@ class Model:
         # dependencies to be updated
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, 'Generator')
         # learning rate
-        lr_base = 1e-3
         lr_step = 1000
-        lr = tf.train.cosine_decay_restarts(lr_base,
+        lr_mul = tf.train.cosine_decay_restarts(1.0,
             global_step, lr_step, t_mul=2.0, m_mul=0.9, alpha=1e-1)
-        lr = tf.train.exponential_decay(lr, global_step, 1000, 0.997)
+        lr_mul = tf.train.exponential_decay(lr_mul, global_step, 1000, 0.997)
+        lr = self.learning_rate * lr_mul
+        wd = self.weight_decay * lr_mul
         self.g_train_sums.append(tf.summary.scalar('Generator/LR', lr))
         # optimizer
-        opt = tf.train.AdamOptimizer(lr, beta1=0.9, beta2=0.999)
+        # opt = tf.train.AdamOptimizer(lr, beta1=0.9, beta2=0.999)
+        opt = tf.contrib.opt.AdamWOptimizer(wd, lr, beta1=0.9, beta2=0.999)
         with tf.control_dependencies(update_ops):
             grads_vars = opt.compute_gradients(self.g_loss, model.tvars)
             update_ops = [opt.apply_gradients(grads_vars, global_step)]

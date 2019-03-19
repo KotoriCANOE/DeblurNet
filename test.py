@@ -1,9 +1,9 @@
 import tensorflow as tf
 import numpy as np
 import os
-from utils import eprint, listdir_files, reset_random, create_session, BatchPNG
-from data import Data
-from model import SRN
+from utils import bool_argument, eprint, listdir_files, reset_random, create_session, BatchPNG
+from data import DataImage as Data
+from model import Model
 
 # losses measured for testing
 def test_losses(ref, pred):
@@ -42,7 +42,8 @@ class Test:
             import shutil
             shutil.rmtree(self.test_dir, ignore_errors=True)
             eprint('Removed: ' + self.test_dir)
-        os.makedirs(self.test_dir)
+        if not os.path.exists(self.test_dir):
+            os.makedirs(self.test_dir)
         # set deterministic random seed
         if self.random_seed is not None:
             reset_random(self.random_seed)
@@ -54,8 +55,7 @@ class Test:
         # pre-computing testing set
         self.test_inputs = []
         self.test_labels = []
-        data_gen = self.data.gen_main()
-        for _inputs, _labels in data_gen:
+        for _inputs, _labels in self.data.gen_main():
             self.test_inputs.append(_inputs)
             self.test_labels.append(_labels)
 
@@ -63,7 +63,7 @@ class Test:
         with tf.device(self.device):
             inputs = tf.placeholder(tf.float32, name='inputs')
             labels = tf.placeholder(tf.float32, name='labels')
-            self.model = SRN(self.config)
+            self.model = Model(self.config)
             outputs = self.model.build_model(inputs)
             self.losses = list(test_losses(labels, outputs))
         # post-processing for output
@@ -192,7 +192,7 @@ def main(argv=None):
     argp.add_argument('--train-dir', default='./train{postfix}.tmp')
     argp.add_argument('--test-dir', default='./test{postfix}.tmp')
     argp.add_argument('--log-file', default='test.log')
-    argp.add_argument('--batch-size', type=int, default=1)
+    argp.add_argument('--batch-size', type=int)
     # data parameters
     argp.add_argument('--dtype', type=int, default=2)
     argp.add_argument('--data-format', default='NCHW')
@@ -201,12 +201,13 @@ def main(argv=None):
     argp.add_argument('--in-channels', type=int, default=3)
     argp.add_argument('--out-channels', type=int, default=3)
     # pre-processing parameters
-    Data.add_arguments(argp)
+    Data.add_arguments(argp, True)
     # model parameters
-    SRN.add_arguments(argp)
+    Model.add_arguments(argp)
     argp.add_argument('--scaling', type=int, default=1)
     # parse
     args = argp.parse_args(argv)
+    Data.parse_arguments(args)
     args.train_dir = args.train_dir.format(postfix=args.postfix)
     args.test_dir = args.test_dir.format(postfix=args.postfix)
     args.dtype = [tf.int8, tf.float16, tf.float32, tf.float64][args.dtype]

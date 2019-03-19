@@ -47,7 +47,7 @@ class DataBase:
                 args.__setattr__(name, value)
         def argchoose(name, cond, tv, fv):
             argdefault(name, tv if cond else fv)
-        argchoose('batch_size', args.test, 32, 32)
+        argchoose('batch_size', args.test, 1, 32)
 
     def get_files_packed(self):
         data_list = listdir_files(self.dataset, filter_ext=['.npz'])
@@ -68,9 +68,6 @@ class DataBase:
         else:
             self.num_epochs = (self.max_steps + self.epoch_steps - 1) // self.epoch_steps
         self.main_set = data_list[:self.epoch_size]
-        # print
-        eprint('main set: {}\nepoch steps: {}\nnum epochs: {}\nmax steps: {}\n'
-            .format(len(self.main_set), self.epoch_steps, self.num_epochs, self.max_steps))
 
     @abstractmethod
     def get_files_origin(self):
@@ -100,7 +97,7 @@ class DataBase:
             self.main_set = data_list[:self.epoch_size]
         # print
         eprint('main set: {}\nepoch steps: {}\nnum epochs: {}\nmax steps: {}\n'
-            .format(self.epoch_size, self.epoch_steps, self.num_epochs, self.max_steps))
+            .format(len(self.main_set), self.epoch_steps, self.num_epochs, self.max_steps))
 
     @staticmethod
     def process_sample(file, label, config):

@@ -16,7 +16,7 @@ class GeneratorConfig:
         self.out_channels = 3
         # model parameters
         self.activation = ACTIVATION
-        self.normalization = 'Instance'
+        self.normalization = None
         # train parameters
         self.random_seed = 0
         self.var_ema = 0.999

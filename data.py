@@ -53,21 +53,20 @@ class DataBase:
         data_list = listdir_files(self.dataset, filter_ext=['.npz'])
         # val set
         if self.val_size is not None:
-            assert self.val_size < len(data_list)
             self.val_steps = self.val_size // self.batch_size
+            assert self.val_steps < len(data_list)
             self.val_size = self.val_steps * self.batch_size
-            self.val_set = data_list[:self.val_size]
-            data_list = data_list[self.val_size:]
+            self.val_set = data_list[:self.val_steps]
+            data_list = data_list[self.val_steps:]
             eprint('validation set: {}'.format(self.val_size))
         # main set
-        assert self.batch_size <= len(data_list)
-        self.epoch_steps = len(data_list) // self.batch_size
+        self.epoch_steps = len(data_list)
         self.epoch_size = self.epoch_steps * self.batch_size
         if self.max_steps is None:
             self.max_steps = self.epoch_steps * self.num_epochs
         else:
             self.num_epochs = (self.max_steps + self.epoch_steps - 1) // self.epoch_steps
-        self.main_set = data_list[:self.epoch_size]
+        self.main_set = data_list
 
     @abstractmethod
     def get_files_origin(self):
@@ -77,24 +76,7 @@ class DataBase:
         if self.packed: # packed dataset
             self.get_files_packed()
         else: # non-packed dataset
-            data_list = self.get_files_origin()
-            # val set
-            if self.val_size is not None:
-                assert self.val_size < len(data_list)
-                self.val_steps = self.val_size // self.batch_size
-                self.val_size = self.val_steps * self.batch_size
-                self.val_set = data_list[:self.val_size]
-                data_list = data_list[self.val_size:]
-                eprint('validation set: {}'.format(self.val_size))
-            # main set
-            assert self.batch_size <= len(data_list)
-            self.epoch_steps = len(data_list) // self.batch_size
-            self.epoch_size = self.epoch_steps * self.batch_size
-            if self.max_steps is None:
-                self.max_steps = self.epoch_steps * self.num_epochs
-            else:
-                self.num_epochs = (self.max_steps + self.epoch_steps - 1) // self.epoch_steps
-            self.main_set = data_list[:self.epoch_size]
+            self.get_files_origin()
         # print
         eprint('main set: {}\nepoch steps: {}\nnum epochs: {}\nmax steps: {}\n'
             .format(len(self.main_set), self.epoch_steps, self.num_epochs, self.max_steps))
@@ -104,10 +86,7 @@ class DataBase:
         pass
 
     @classmethod
-    def extract_batch(cls, batch_set, config):
-        pass
-
-    def extract_batch_packed(self, batch_set):
+    def extract_batch(cls, batch_set):
         # initialize
         inputs = []
         labels = []
@@ -123,7 +102,41 @@ class DataBase:
         labels = np.stack(labels)
         return inputs, labels
 
+    def extract_batch_packed(self, batch_set):
+        with np.load(batch_set) as npz:
+            inputs = npz['inputs']
+            labels = npz['labels']
+        return inputs, labels
+
     def _gen_batches_packed(self, dataset, epoch_steps, num_epochs=1, start=0,
+        shuffle=False):
+        _dataset = dataset
+        max_steps = epoch_steps * num_epochs
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor(self.processes) as executor:
+            futures = []
+            # loop over epochs
+            for epoch in range(start // epoch_steps, num_epochs):
+                step_offset = epoch_steps * epoch
+                step_start = max(0, start - step_offset)
+                step_stop = min(epoch_steps, max_steps - step_offset)
+                # random shuffle
+                if shuffle:
+                    _dataset = dataset.copy()
+                    random.shuffle(_dataset)
+                # loop over steps within an epoch
+                for step in range(step_start, step_stop):
+                    batch_set = _dataset[step]
+                    futures.append(executor.submit(self.extract_batch_packed,
+                        batch_set))
+                    # yield the data beyond prefetch range
+                    while len(futures) >= self.prefetch:
+                        yield futures.pop(0).result()
+            # yield the remaining data
+            for future in futures:
+                yield future.result()
+
+    def _gen_batches_origin(self, dataset, epoch_steps, num_epochs=1, start=0,
         shuffle=False):
         _dataset = dataset
         max_steps = epoch_steps * num_epochs
@@ -144,7 +157,7 @@ class DataBase:
                     offset = step * self.batch_size
                     upper = min(len(_dataset), offset + self.batch_size)
                     batch_set = _dataset[offset : upper]
-                    futures.append(executor.submit(self.extract_batch_packed,
+                    futures.append(executor.submit(self.extract_batch,
                         batch_set))
                     # yield the data beyond prefetch range
                     while len(futures) >= self.prefetch:
@@ -153,15 +166,11 @@ class DataBase:
             for future in futures:
                 yield future.result()
 
-    def _gen_batches_origin(self, dataset, epoch_steps, num_epochs=1, start=0,
-        shuffle=False):
-        pass
-
     def _gen_batches(self, dataset, epoch_steps, num_epochs=1, start=0,
         shuffle=False):
         # packed dataset
         if self.packed:
-            return self._gen_batches_packed(dataset, epoch_steps, num_epochs, start)
+            return self._gen_batches_packed(dataset, epoch_steps, num_epochs, start, shuffle)
         else:
             return self._gen_batches_origin(dataset, epoch_steps, num_epochs, start, shuffle)
 
@@ -178,4 +187,21 @@ class DataBase:
 
 class DataImage(DataBase):
     def get_files_origin(self):
-        raise ValueError('Not implemented!')
+        data_list = listdir_files(self.dataset, filter_ext=['.npz'])
+        # val set
+        if self.val_size is not None:
+            assert self.val_size < len(data_list)
+            self.val_steps = self.val_size // self.batch_size
+            self.val_size = self.val_steps * self.batch_size
+            self.val_set = data_list[:self.val_size]
+            data_list = data_list[self.val_size:]
+            eprint('validation set: {}'.format(self.val_size))
+        # main set
+        assert self.batch_size <= len(data_list)
+        self.epoch_steps = len(data_list) // self.batch_size
+        self.epoch_size = self.epoch_steps * self.batch_size
+        if self.max_steps is None:
+            self.max_steps = self.epoch_steps * self.num_epochs
+        else:
+            self.num_epochs = (self.max_steps + self.epoch_steps - 1) // self.epoch_steps
+        self.main_set = data_list[:self.epoch_size]

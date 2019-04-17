@@ -67,9 +67,22 @@ lr: 5e-3, 2e-3, 1e-3, 5e-4, 2e-4, 1e-4
 ## 40,33,41,42
 
 batch size: 48,32,20,16
+(chose 32)
 
 ## 43
 
+(unchanged)
 steps: 255000
 batch size: 16
+
+## 50
+
+steps: 255000
+batch size : 32
+Update train set: Pixiv bookmark
+
+## 51
+
+steps: 511000
+Update train set: Pixiv bookmark + MSCOCO 2017 + DIV2K splitted + Flickr2K splitted, with filtering
 

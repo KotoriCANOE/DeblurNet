@@ -38,7 +38,7 @@ class Generator(GeneratorConfig):
         regularizer=None, collections=None):
         biases = tf.initializers.zeros(self.dtype) if biases else None
         initializer = tf.initializers.variance_scaling(
-            1.0, 'fan_in', 'normal', self.random_seed, self.dtype)
+            1.0, 'fan_in', 'truncated_normal', self.random_seed, self.dtype)
         skip = last
         # pre-activation
         if normalizer: last = normalizer(last)
@@ -59,7 +59,7 @@ class Generator(GeneratorConfig):
         kernel=[4, 4], stride=[2, 2], format=DATA_FORMAT,
         activation=ACTIVATION, normalizer=None, regularizer=None, collections=None):
         initializer = tf.initializers.variance_scaling(
-            1.0, 'fan_in', 'normal', self.random_seed, self.dtype)
+            1.0, 'fan_in', 'truncated_normal', self.random_seed, self.dtype)
         # pre-activation
         if activation: last = activation(last)
         # convolution
@@ -78,7 +78,7 @@ class Generator(GeneratorConfig):
         kernel=[3, 3], stride=[2, 2], format=DATA_FORMAT,
         activation=ACTIVATION, normalizer=None, regularizer=None, collections=None):
         initializer = tf.initializers.variance_scaling(
-            1.0, 'fan_in', 'normal', self.random_seed, self.dtype)
+            1.0, 'fan_in', 'truncated_normal', self.random_seed, self.dtype)
         # pre-activation
         if activation: last = activation(last)
         # upsample

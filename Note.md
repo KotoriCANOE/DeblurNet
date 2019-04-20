@@ -86,3 +86,8 @@ Update train set: Pixiv bookmark
 steps: 511000
 Update train set: Pixiv bookmark + MSCOCO 2017 + DIV2K splitted + Flickr2K splitted, with filtering
 
+## 52
+
+steps: 511000
+remove SEUnit
+

@@ -51,7 +51,7 @@ class Generator(GeneratorConfig):
             dilate, None, None, None, initializer, regularizer, biases,
             variables_collections=collections)
         # skip connection
-        last = layers.SEUnit(last, channels, format, collections)
+        # last = layers.SEUnit(last, channels, format, collections)
         last += skip
         return last
 

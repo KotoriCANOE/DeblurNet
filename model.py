@@ -1,6 +1,6 @@
 import tensorflow as tf
 import layers
-from network import Generator
+from network import GeneratorResNet as Generator
 
 DATA_FORMAT = 'NCHW'
 
@@ -106,7 +106,8 @@ class Model:
         lr_step = 1000
         lr_mul = tf.train.cosine_decay_restarts(1.0,
             global_step, lr_step, t_mul=2.0, m_mul=0.9, alpha=1e-1)
-        lr_mul = tf.train.exponential_decay(lr_mul, global_step, 1000, 0.997)
+        lr_mul = tf.train.exponential_decay(lr_mul, global_step, 1000, 0.997) # 511000 steps
+        # lr_mul = tf.train.exponential_decay(lr_mul, global_step, 1000, 0.998) # 1023000 steps
         lr = self.learning_rate * lr_mul
         wd = self.weight_decay * lr_mul
         self.g_train_sums.append(tf.summary.scalar('Generator/LR', lr))
@@ -120,7 +121,7 @@ class Model:
         for grad, var in grads_vars:
             self.g_train_sums.append(tf.summary.histogram(var.op.name + '/grad', grad))
             self.g_train_sums.append(tf.summary.histogram(var.op.name, var))
-        # save moving average of trainalbe variables
+        # save moving average of trainable variables
         update_ops = model.apply_ema(update_ops)
         # all the saver variables
         self.svars = model.svars

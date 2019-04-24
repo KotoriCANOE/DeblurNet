@@ -12,11 +12,13 @@ exponential decay: 0.999^(step/1000)
 steps: 127000
 cosine restart: t_mul=2.0, m_mul=0.9, alpha=0.1
 exponential decay: 0.997^(step/1000)
+forward: ~125ms
 
 ## 22
 
 Generator - Norm: Batch
 (FusedBatchNorm faster than InstanceNorm but slightly worse)
+forward: ~90ms
 
 ## 23
 
@@ -88,6 +90,40 @@ Update train set: Pixiv bookmark + MSCOCO 2017 + DIV2K splitted + Flickr2K split
 
 ## 52
 
+(unchanged)
 steps: 511000
-remove SEUnit
+remove SEUnit in ResBlock
+
+## 53
+
+(unchanged)
+steps: 511000
+remove SEUnit in ResBlock
+downsample: strided convolution => SpaceToDepth
+
+## 54
+
+steps: 127000
+model: GeneratorSRN
+added end-to-end skip connection
+forward: 73.669ms
+
+## 55
+
+steps: 127000
+model: GeneratorResUNet
+forward: 63.704ms
+
+## 56
+
+steps: 127000
+model: GeneratorResNet
+forward: 51.880ms
+
+## 57
+
+steps: 127000
+model: GeneratorResNet
+added 1 ResBlock before ResBlocks and 1 ResBlock after ResBlocks, with U-Net-like skip connection
+forward: 64.402ms
 

@@ -1,6 +1,6 @@
 import tensorflow as tf
 import layers
-from network import GeneratorResNet as Generator
+from network import GeneratorSRN as Generator
 
 DATA_FORMAT = 'NCHW'
 
@@ -85,6 +85,13 @@ class Model:
                 loss_collection=None)
             tf.losses.add_loss(l1_loss)
             update_ops.append(self.loss_summary('l1_loss', l1_loss, self.g_log_losses))
+            # SSIM loss
+            labelsY = layers.RGB2Y(labels, self.data_format)
+            outputsY = layers.RGB2Y(outputs, self.data_format)
+            ssim_loss = 1 - layers.MS_SSIM2(labelsY, outputsY, sigma=[0.6, 1.5, 4.0],
+                L=1, norm=False, data_format=self.data_format)
+            tf.losses.add_loss(ssim_loss * 0.1)
+            update_ops.append(self.loss_summary('ssim_loss', ssim_loss, self.g_log_losses))
             # regularization loss
             reg_losses = tf.losses.get_regularization_losses('Generator')
             reg_loss = tf.add_n(reg_losses)
@@ -106,8 +113,7 @@ class Model:
         lr_step = 1000
         lr_mul = tf.train.cosine_decay_restarts(1.0,
             global_step, lr_step, t_mul=2.0, m_mul=0.9, alpha=1e-1)
-        lr_mul = tf.train.exponential_decay(lr_mul, global_step, 1000, 0.997) # 511000 steps
-        # lr_mul = tf.train.exponential_decay(lr_mul, global_step, 1000, 0.998) # 1023000 steps
+        lr_mul = tf.train.exponential_decay(lr_mul, global_step, 1000, 0.998)
         lr = self.learning_rate * lr_mul
         wd = self.weight_decay * lr_mul
         self.g_train_sums.append(tf.summary.scalar('Generator/LR', lr))

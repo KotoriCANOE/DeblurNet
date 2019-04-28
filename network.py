@@ -293,31 +293,23 @@ class GeneratorResUNet(GeneratorBase):
         # encoder
         with tf.variable_scope('InBlock'):
             skips.append(last)
-            last = self.EBlock(last, 64, 0, [3, 3], [1, 1],
+            last = self.EBlock(last, 32, 0, [3, 3], [1, 1],
                 format, None, None, regularizer)
         with tf.variable_scope('EBlock_0'):
             skips.append(last)
-            last = self.EBlock(last, 32, 1, kernel1, stride1,
+            last = self.EBlock(last, 32, 2, kernel1, stride1,
                 format, activation, normalizer, regularizer)
         with tf.variable_scope('EBlock_1'):
             skips.append(last)
-            last = self.EBlock(last, 22, 2, kernel1, stride1,
-                format, activation, normalizer, regularizer)
-        with tf.variable_scope('EBlock_2'):
-            skips.append(last)
-            last = self.EBlock(last, 16, 2, kernel1, stride1,
+            last = self.EBlock(last, 32, 2, kernel1, stride1,
                 format, activation, normalizer, regularizer)
         # decoder
-        with tf.variable_scope('DBlock_2'):
-            last = self.DBlock(last, 22, 2, kernel2, stride2,
-                format, activation, normalizer, regularizer)
-            last = skip_connection(last, skips.pop())
         with tf.variable_scope('DBlock_1'):
             last = self.DBlock(last, 32, 2, kernel2, stride2,
                 format, activation, normalizer, regularizer)
             last = skip_connection(last, skips.pop())
         with tf.variable_scope('DBlock_0'):
-            last = self.DBlock(last, 64, 1, [3, 3], [1, 1],
+            last = self.DBlock(last, 32, 2, kernel2, stride2,
                 format, activation, normalizer, regularizer)
             last = skip_connection(last, skips.pop())
         with tf.variable_scope('OutBlock'):

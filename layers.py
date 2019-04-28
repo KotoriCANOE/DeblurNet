@@ -48,6 +48,24 @@ def SmoothL1(labels, predictions, weights=1.0, scope=None, loss_collection=tf.Gr
     tf.losses.add_loss(smoothl1, loss_collection)
     return smoothl1
 
+# convert RGB to Y scale
+def RGB2Y(last, data_format='NHWC', scope=None):
+    with tf.variable_scope(scope, 'RGB2Y'):
+        c1 = 1 / 3
+        coef = [c1, c1, c1]
+        t = tf.constant(coef, shape=[1, 3], dtype=last.dtype)
+        if data_format == 'NCHW':
+            last = tf.transpose(last, (0, 2, 3, 1))
+        shape = tf.shape(last)
+        last = tf.reshape(last, [tf.reduce_prod(shape[:-1]), 3])
+        last = tf.matmul(last, t, transpose_b=True)
+        if data_format == 'NCHW':
+            shape = [shape[0], 1, shape[1], shape[2]]
+        else:
+            shape = [shape[0], shape[1], shape[2], 1]
+        last = tf.reshape(last, shape)
+    return last
+
 # Gaussian filter window for Conv2D
 def GaussWindow(radius, sigma, channels=1, one_dim=False, dtype=tf.float32):
     if one_dim:

@@ -127,3 +127,32 @@ model: GeneratorResNet
 added 1 ResBlock before ResBlocks and 1 ResBlock after ResBlocks, with U-Net-like skip connection
 forward: 64.402ms
 
+## 58
+
+steps: 127000
+model: GeneratorResUNet
+2 EBlocks + 2 DBlocks
+forward: 63.676ms
+
+## 59
+
+(unchanged)
+steps: 127000
+model: GeneratorResUNet
+6 ResBlocks + 6 ResBlocks
+forward: 78.625ms
+
+## 60
+
+steps: 127000
+model: GeneratorSRN
+loss: L1 + MS-SSIM2
+forward: 83.02ms
+
+## 61
+
+steps: 1023000
+model: GeneratorSRN
+loss: L1 + MS-SSIM2
+exponential decay: 0.997 => 0.998
+forward: 76.151ms

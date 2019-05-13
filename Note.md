@@ -151,8 +151,44 @@ forward: 83.02ms
 
 ## 61
 
-steps: 1023000
+steps: 511000
 model: GeneratorSRN
 loss: L1 + MS-SSIM2
 exponential decay: 0.997 => 0.998
 forward: 76.151ms
+
+## 62
+
+steps: 1023000
+MS-SSIM2: [0.5, 1.5, 4.0] => [1.5, 4.0, 10.0]
+forward: 78.232ms
+
+## 63
+
+(unchanged)
+steps: 260000 (250000)
+Activation: Swish => ReLU
+
+## 64
+
+steps: 274000 (250000)
+Remove biases in ResBlocks
+
+## 65
+
+steps: 205000
+Remove biases in EBlocks and DBlocks
+forward: 70.891ms
+
+## 66
+
+steps: 2047000
+exponential decay: 0.998 => 0.999
+Activation: Swish => ReLU
+forward: 64.576ms
+
+## 67
+
+steps: 2047000
+Activation: Swish
+

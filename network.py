@@ -3,6 +3,7 @@ import tensorflow as tf
 import tensorflow.contrib.layers as slim
 import layers
 
+# ACTIVATION = tf.nn.relu
 ACTIVATION = layers.Swish
 DATA_FORMAT = 'NCHW'
 
@@ -16,12 +17,13 @@ class GeneratorConfig:
         self.in_channels = 3
         self.out_channels = 3
         # model parameters
+        self.biases = False
         self.activation = ACTIVATION
         self.normalization = None
         # train parameters
         self.random_seed = 0
         self.var_ema = 0.999
-        self.weight_decay = 1e-6
+        self.weight_decay = 0#1e-6
 
 class GeneratorBase(GeneratorConfig):
     __metaclass__ = ABCMeta
@@ -40,7 +42,8 @@ class GeneratorBase(GeneratorConfig):
         if self.var_ema > 0:
             self.ema = tf.train.ExponentialMovingAverage(self.var_ema)
 
-    def ResBlock(self, last, kernel=[3, 3], stride=[1, 1], biases=True, format=DATA_FORMAT,
+    def ResBlock(self, last, kernel=[3, 3], stride=[1, 1],
+        biases=False, format=DATA_FORMAT,
         dilate=1, activation=ACTIVATION, normalizer=None,
         regularizer=None, collections=None):
         in_channels = last.shape.as_list()[-3 if format == 'NCHW' else -1]
@@ -64,8 +67,9 @@ class GeneratorBase(GeneratorConfig):
         return last
 
     def EBlock(self, last, channels, resblocks=1,
-        kernel=[4, 4], stride=[2, 2], format=DATA_FORMAT,
+        kernel=[4, 4], stride=[2, 2], biases=True, format=DATA_FORMAT,
         activation=ACTIVATION, normalizer=None, regularizer=None, collections=None):
+        biases = tf.initializers.zeros(self.dtype) if biases else None
         initializer = tf.initializers.variance_scaling(
             1.0, 'fan_in', 'truncated_normal', self.random_seed, self.dtype)
         # pre-activation
@@ -73,18 +77,20 @@ class GeneratorBase(GeneratorConfig):
         # convolution
         last = slim.conv2d(last, channels, kernel, stride, 'SAME', format,
             1, None, None, weights_initializer=initializer,
-            weights_regularizer=regularizer, variables_collections=collections)
+            weights_regularizer=regularizer, biases_initializer=biases,
+            variables_collections=collections)
         # residual blocks
         for i in range(resblocks):
             with tf.variable_scope('ResBlock_{}'.format(i)):
-                last = self.ResBlock(last, format=format,
+                last = self.ResBlock(last, biases=False, format=format,
                     activation=activation, normalizer=normalizer,
                     regularizer=regularizer, collections=collections)
         return last
 
     def DBlock(self, last, channels, resblocks=1,
-        kernel=[3, 3], stride=[2, 2], format=DATA_FORMAT,
+        kernel=[3, 3], stride=[2, 2], biases=True, format=DATA_FORMAT,
         activation=ACTIVATION, normalizer=None, regularizer=None, collections=None):
+        biases = tf.initializers.zeros(self.dtype) if biases else None
         initializer = tf.initializers.variance_scaling(
             1.0, 'fan_in', 'truncated_normal', self.random_seed, self.dtype)
         # pre-activation
@@ -94,11 +100,12 @@ class GeneratorBase(GeneratorConfig):
         # convolution
         last = slim.conv2d(last, channels, kernel, [1, 1], 'SAME', format,
             1, None, None, weights_initializer=initializer,
-            weights_regularizer=regularizer, variables_collections=collections)
+            weights_regularizer=regularizer, biases_initializer=biases,
+            variables_collections=collections)
         # residual blocks
         for i in range(resblocks):
             with tf.variable_scope('ResBlock_{}'.format(i)):
-                last = self.ResBlock(last, format=format,
+                last = self.ResBlock(last, biases=False, format=format,
                     activation=activation, normalizer=normalizer,
                     regularizer=regularizer, collections=collections)
         return last
@@ -176,10 +183,11 @@ class GeneratorResNet(GeneratorBase):
         with tf.variable_scope('InBlock'):
             skips.append(last)
             last = self.EBlock(last, 32, 0, [3, 3], [1, 1],
-                format, None, None, regularizer)
+                True, format, None, None, regularizer)
             skips.append(last)
         with tf.variable_scope('InResBlock'):
-            last = self.ResBlock(last, kernel1, stride1, format=format,
+            last = self.ResBlock(last, kernel1, stride1,
+                biases=self.biases, format=format,
                 activation=activation, normalizer=normalizer,
                 regularizer=regularizer)
             skips.append(last)
@@ -187,19 +195,21 @@ class GeneratorResNet(GeneratorBase):
         resblocks = 8
         for depth in range(resblocks):
             with tf.variable_scope('ResBlock_{}'.format(depth)):
-                last = self.ResBlock(last, kernel1, stride1, format=format,
+                last = self.ResBlock(last, kernel1, stride1,
+                    biases=self.biases, format=format,
                     activation=activation, normalizer=normalizer,
                     regularizer=regularizer)
         # decoder
         with tf.variable_scope('OutResBlock'):
             last = skip_connection(last, skips.pop())
-            last = self.ResBlock(last, kernel1, stride1, format=format,
+            last = self.ResBlock(last, kernel1, stride1,
+                biases=self.biases, format=format,
                 activation=activation, normalizer=normalizer,
                 regularizer=regularizer)
         with tf.variable_scope('OutBlock'):
             last = skip_connection(last, skips.pop())
             last = self.DBlock(last, self.out_channels, 0, [3, 3], [1, 1],
-                format, activation, normalizer, regularizer)
+                True, format, activation, normalizer, regularizer)
             last = skip_connection(last, skips.pop())
         # return
         return last
@@ -218,57 +228,58 @@ class GeneratorSRN(GeneratorBase):
         with tf.variable_scope('InBlock'):
             skips.append(last)
             last = self.EBlock(last, 32, 0, [3, 3], [1, 1],
-                format, None, None, regularizer)
+                True, format, None, None, regularizer)
         with tf.variable_scope('EBlock_0'):
             skips.append(last)
             last = self.EBlock(last, 32, 2, [3, 3], [1, 1],
-                format, activation, normalizer, regularizer)
+                self.biases, format, activation, normalizer, regularizer)
         with tf.variable_scope('EBlock_1'):
             skips.append(last)
             last = self.EBlock(last, 64, 2, kernel1, stride1,
-                format, activation, normalizer, regularizer)
+                self.biases, format, activation, normalizer, regularizer)
         with tf.variable_scope('EBlock_2'):
             skips.append(last)
             last = self.EBlock(last, 96, 2, kernel1, stride1,
-                format, activation, normalizer, regularizer)
+                self.biases, format, activation, normalizer, regularizer)
         with tf.variable_scope('EBlock_3'):
             skips.append(last)
             last = self.EBlock(last, 128, 2, kernel1, stride1,
-                format, activation, normalizer, regularizer)
+                self.biases, format, activation, normalizer, regularizer)
         # decoder
         with tf.variable_scope('DBlock_3'):
             last = self.DBlock(last, 96, 2, kernel2, stride2,
-                format, activation, normalizer, regularizer)
+                self.biases, format, activation, normalizer, regularizer)
             last = skip_connection(last, skips.pop())
         with tf.variable_scope('DBlock_2'):
             last = self.DBlock(last, 64, 2, kernel2, stride2,
-                format, activation, normalizer, regularizer)
+                self.biases, format, activation, normalizer, regularizer)
             last = skip_connection(last, skips.pop())
         with tf.variable_scope('DBlock_1'):
             last = self.DBlock(last, 32, 2, kernel2, stride2,
-                format, activation, normalizer, regularizer)
+                self.biases, format, activation, normalizer, regularizer)
             last = skip_connection(last, skips.pop())
         with tf.variable_scope('DBlock_0'):
             last = self.DBlock(last, 32, 2, [3, 3], [1, 1],
-                format, activation, normalizer, regularizer)
+                self.biases, format, activation, normalizer, regularizer)
             last = skip_connection(last, skips.pop())
         with tf.variable_scope('OutBlock'):
             last = self.DBlock(last, self.out_channels, 0, [3, 3], [1, 1],
-                format, activation, normalizer, regularizer)
+                True, format, activation, normalizer, regularizer)
             last = skip_connection(last, skips.pop())
         # return
         return last
 
 class GeneratorResUNet(GeneratorBase):
     def DBlock(self, last, channels, resblocks=1,
-        kernel=[3, 3], stride=[1, 1], format=DATA_FORMAT,
+        kernel=[3, 3], stride=[1, 1], biases=True, format=DATA_FORMAT,
         activation=ACTIVATION, normalizer=None, regularizer=None, collections=None):
+        biases = tf.initializers.zeros(self.dtype) if biases else None
         initializer = tf.initializers.variance_scaling(
             1.0, 'fan_in', 'truncated_normal', self.random_seed, self.dtype)
         # residual blocks
         for i in range(resblocks):
             with tf.variable_scope('ResBlock_{}'.format(i)):
-                last = self.ResBlock(last, format=format,
+                last = self.ResBlock(last, biases=False, format=format,
                     activation=activation, normalizer=normalizer,
                     regularizer=regularizer, collections=collections)
         # pre-activation
@@ -278,7 +289,8 @@ class GeneratorResUNet(GeneratorBase):
         # convolution
         last = slim.conv2d(last, channels, kernel, [1, 1], 'SAME', format,
             1, None, None, weights_initializer=initializer,
-            weights_regularizer=regularizer, variables_collections=collections)
+            weights_regularizer=regularizer, biases_initializer=biases,
+            variables_collections=collections)
         return last
 
     def def_model(self, last, activation, normalizer, regularizer):
@@ -294,27 +306,27 @@ class GeneratorResUNet(GeneratorBase):
         with tf.variable_scope('InBlock'):
             skips.append(last)
             last = self.EBlock(last, 32, 0, [3, 3], [1, 1],
-                format, None, None, regularizer)
+                True, format, None, None, regularizer)
         with tf.variable_scope('EBlock_0'):
             skips.append(last)
             last = self.EBlock(last, 32, 2, kernel1, stride1,
-                format, activation, normalizer, regularizer)
+                self.biases, format, activation, normalizer, regularizer)
         with tf.variable_scope('EBlock_1'):
             skips.append(last)
             last = self.EBlock(last, 32, 2, kernel1, stride1,
-                format, activation, normalizer, regularizer)
+                self.biases, format, activation, normalizer, regularizer)
         # decoder
         with tf.variable_scope('DBlock_1'):
             last = self.DBlock(last, 32, 2, kernel2, stride2,
-                format, activation, normalizer, regularizer)
+                self.biases, format, activation, normalizer, regularizer)
             last = skip_connection(last, skips.pop())
         with tf.variable_scope('DBlock_0'):
             last = self.DBlock(last, 32, 2, kernel2, stride2,
-                format, activation, normalizer, regularizer)
+                self.biases, format, activation, normalizer, regularizer)
             last = skip_connection(last, skips.pop())
         with tf.variable_scope('OutBlock'):
             last = self.DBlock(last, self.out_channels, 0, [3, 3], [1, 1],
-                format, activation, normalizer, regularizer)
+                True, format, activation, normalizer, regularizer)
             last = skip_connection(last, skips.pop())
         # return
         return last

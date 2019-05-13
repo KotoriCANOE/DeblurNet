@@ -113,13 +113,11 @@ class Model:
         lr_step = 1000
         lr_mul = tf.train.cosine_decay_restarts(1.0,
             global_step, lr_step, t_mul=2.0, m_mul=0.9, alpha=1e-1)
-        # lr_mul = tf.train.exponential_decay(lr_mul, global_step, 1000, 0.998)
         lr_mul = tf.train.exponential_decay(lr_mul, global_step, 1000, 0.999)
         lr = self.learning_rate * lr_mul
         wd = self.weight_decay * lr_mul
         self.g_train_sums.append(tf.summary.scalar('Generator/LR', lr))
         # optimizer
-        # opt = tf.train.AdamOptimizer(lr, beta1=0.9, beta2=0.999)
         opt = tf.contrib.opt.AdamWOptimizer(wd, lr, beta1=0.9, beta2=0.999)
         with tf.control_dependencies(update_ops):
             grads_vars = opt.compute_gradients(self.g_loss, model.tvars)

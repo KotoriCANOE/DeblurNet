@@ -20,6 +20,7 @@ class GeneratorConfig:
         self.biases = False
         self.activation = ACTIVATION
         self.normalization = None
+        self.scaling = 1
         # train parameters
         self.random_seed = 0
         self.var_ema = 0.999
@@ -262,10 +263,21 @@ class GeneratorSRN(GeneratorBase):
             last = self.DBlock(last, 32, 2, [3, 3], [1, 1],
                 self.biases, format, activation, normalizer, regularizer)
             last = skip_connection(last, skips.pop())
+        with tf.variable_scope('UpBlock'):
+            if self.scaling > 1:
+                last = self.DBlock(last, 32, 2, [3, 3], [self.scaling, self.scaling],
+                    self.biases, format, activation, normalizer, regularizer)
         with tf.variable_scope('OutBlock'):
             last = self.DBlock(last, self.out_channels, 0, [3, 3], [1, 1],
                 True, format, activation, normalizer, regularizer)
-            last = skip_connection(last, skips.pop())
+            if self.scaling == 1:
+                last += skips.pop()
+        with tf.variable_scope('SkipBlock'):
+            if self.scaling > 1:
+                skip = skips.pop()
+                skip = self.DBlock(skip, self.out_channels, 0, [7, 7], [self.scaling, self.scaling],
+                    self.biases, format, activation, normalizer, regularizer)
+                last += skip
         # return
         return last
 

@@ -95,6 +95,7 @@ def create_session(graph=None, debug=False):
     gpu_options = tf.GPUOptions(allow_growth=True)
     config = tf.ConfigProto(gpu_options=gpu_options,
         allow_soft_placement=True, log_device_placement=False)
+    config.graph_options.optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
     sess = tf.Session(graph=graph, config=config)
     if debug:
         from tensorflow.python import debug as tfdbg

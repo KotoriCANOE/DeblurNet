@@ -192,3 +192,25 @@ forward: 64.576ms
 steps: 2047000
 Activation: Swish
 
+## 68
+
+steps: 2047000
+exponential decay: 0.998
+
+
+## 200
+
+SR
+steps: 255000
+dataset: TrainPP/00 partial
+
+## 201
+
+steps: 63000
+dataset: TrainPP/00
+
+## 202
+
+steps: 63000
+skip: add => concat
+

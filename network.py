@@ -223,6 +223,7 @@ class GeneratorSRN(GeneratorBase):
         kernel2 = [3, 3]
         stride2 = [2, 2]
         skip_connection = lambda x, y: x + y
+        #skip_connection = lambda x, y: tf.concat([x, y], axis=-3 if format == 'NCHW' else -1)
         # states
         skips = []
         # encoder
@@ -276,7 +277,7 @@ class GeneratorSRN(GeneratorBase):
             if self.scaling > 1:
                 skip = skips.pop()
                 skip = self.DBlock(skip, self.out_channels, 0, [7, 7], [self.scaling, self.scaling],
-                    self.biases, format, activation, normalizer, regularizer)
+                    False, format, None, None, regularizer)
                 last += skip
         # return
         return last

@@ -8,9 +8,9 @@ class Model:
     def __init__(self, config=None):
         # format parameters
         self.dtype = tf.float32
+        self.data_format = DATA_FORMAT
         self.input_range = 2 # internal range of input. 1: [0,1], 2: [-1,1]
         self.output_range = 2 # internal range of output. 1: [0,1], 2: [-1,1]
-        self.data_format = DATA_FORMAT
         self.in_channels = 3
         self.out_channels = 3
         # train parameters
@@ -34,9 +34,9 @@ class Model:
         # format parameters
         argp.add_argument('--input-range', type=int, default=2)
         argp.add_argument('--output-range', type=int, default=2)
+        # training parameters
         argp.add_argument('--learning-rate', type=float, default=1e-3)
         argp.add_argument('--weight-decay', type=float, default=5e-5)
-        # training parameters
         argp.add_argument('--var-ema', type=float, default=0.999)
 
     def build_model(self, inputs=None):

@@ -21,7 +21,7 @@ def PReLU(last, format=None, collections=None, dtype=tf.float32, scope=None):
         last = tf.maximum(0.0, last) + alpha * tf.minimum(0.0, last)
     return last
 
-def SEUnit(last, channels=None, format=None, collections=None, scope=None):
+def SEUnit(last, channels=None, format=None, regularizer=None, collections=None, scope=None):
     in_channels = int(last.get_shape()[-3 if format == 'NCHW' else -1])
     if channels is None:
         channels = in_channels
@@ -33,20 +33,29 @@ def SEUnit(last, channels=None, format=None, collections=None, scope=None):
         skip = last
         last = tf.reduce_mean(last, [-2, -1] if format == 'NCHW' else [-3, -2])
         last = slim.fully_connected(last, channels, tf.nn.relu,
+            weights_regularizer=regularizer,
             variables_collections=collections)
-        last = slim.fully_connected(last, in_channels, tf.sigmoid)
+        last = slim.fully_connected(last, in_channels, tf.sigmoid,
+            weights_regularizer=regularizer,
+            variables_collections=collections)
         hw_idx = -1 if format == 'NCHW' else -2
         last = tf.expand_dims(tf.expand_dims(last, hw_idx), hw_idx)
         last = tf.multiply(skip, last)
     return last
 
-def SmoothL1(labels, predictions, weights=1.0, scope=None, loss_collection=tf.GraphKeys.LOSSES):
-    diff = predictions - labels
-    absdiff = tf.abs(diff)
-    smoothl1 = tf.cond(absdiff < 1, lambda: 0.5 * tf.square(diff), lambda: absdiff - 0.5)
-    smoothl1 *= weights
-    tf.losses.add_loss(smoothl1, loss_collection)
-    return smoothl1
+def SmoothL1(labels, predictions, mean=True, weights=1.0, scope=None, loss_collection=tf.GraphKeys.LOSSES):
+    with tf.variable_scope(scope, 'SmoothL1'):
+        diff = predictions - labels
+        absdiff = tf.abs(diff)
+        condmask = tf.cast(absdiff < 1, tf.float32)
+        smoothl1 = condmask * (0.5 * tf.square(diff)) + (1 - condmask) * (absdiff - 0.5)
+        if mean:
+            smoothl1 = tf.reduce_mean(smoothl1)
+        if weights != 1.0:
+            smoothl1 *= weights
+        if mean and loss_collection is not None:
+            tf.losses.add_loss(smoothl1, loss_collection)
+        return smoothl1
 
 # convert RGB to Y scale
 def RGB2Y(last, data_format='NHWC', scope=None):

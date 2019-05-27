@@ -182,6 +182,7 @@ forward: 70.891ms
 
 ## 66
 
+(unchanged)
 steps: 2047000
 exponential decay: 0.998 => 0.999
 Activation: Swish => ReLU
@@ -190,12 +191,36 @@ forward: 64.576ms
 ## 67
 
 steps: 2047000
+exponential decay: 0.998 => 0.999
 Activation: Swish
 
 ## 68
 
+(unchanged)
 steps: 2047000
 exponential decay: 0.998
+
+## 69
+
+(unchanged, failed due to LR policy)
+steps: 2047000
+Added one more block for encoder/decoder
+
+## 70
+
+(unchanged)
+steps: 511000 (470000)
+exponential decay: 0.998
+Removed SEUnit
+loss: L1
+
+## 71
+
+(optional)
+steps: 2047000
+exponential decay: 0.999
+Removed SEUnit
+loss: L1
 
 
 ## 200

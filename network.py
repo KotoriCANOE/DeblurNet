@@ -184,8 +184,8 @@ class GeneratorResNet(GeneratorBase):
             skips.append(last)
             last = self.EBlock(last, 32, 0, [3, 3], [1, 1],
                 True, format, None, None, regularizer)
-            skips.append(last)
         with tf.variable_scope('InResBlock'):
+            skips.append(last)
             last = self.ResBlock(last, [3, 3], [1, 1],
                 biases=self.biases, format=format,
                 activation=activation, normalizer=normalizer,
@@ -206,11 +206,22 @@ class GeneratorResNet(GeneratorBase):
                 biases=self.biases, format=format,
                 activation=activation, normalizer=normalizer,
                 regularizer=regularizer)
-        with tf.variable_scope('OutBlock'):
             last = skip_connection(last, skips.pop())
+        with tf.variable_scope('UpBlock'):
+            if self.scaling > 1:
+                last = self.DBlock(last, 32, 2, [3, 3], [self.scaling, self.scaling],
+                    self.biases, format, activation, normalizer, regularizer)
+        with tf.variable_scope('OutBlock'):
             last = self.DBlock(last, self.out_channels, 0, [3, 3], [1, 1],
                 True, format, activation, normalizer, regularizer)
-            last = skip_connection(last, skips.pop())
+            if self.scaling == 1:
+                last += skips.pop()
+        with tf.variable_scope('SkipBlock'):
+            if self.scaling > 1:
+                skip = skips.pop()
+                skip = self.DBlock(skip, self.out_channels, 0, [7, 7], [self.scaling, self.scaling],
+                    False, format, None, None, regularizer)
+                last += skip
         # return
         return last
 

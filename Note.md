@@ -211,7 +211,7 @@ Added one more block for encoder/decoder
 (unchanged)
 steps: 511000 (470000)
 exponential decay: 0.998
-Removed SEUnit
+SEUnit: off
 loss: L1
 
 ## 71
@@ -219,7 +219,7 @@ loss: L1
 (optional)
 steps: 2047000
 exponential decay: 0.999
-Removed SEUnit
+SEUnit: off
 loss: L1
 
 
@@ -236,6 +236,30 @@ dataset: TrainPP/00
 
 ## 202
 
+(unchanged)
 steps: 63000
 skip: add => concat
+
+## 203
+
+steps: 127000
+dataset: TrainPP
+exponential decay: 0.99
+GeneratorSRN
+SEUnit: off
+loss: L1
+
+## 204
+
+(unchanged)
+steps: 127000
+GeneratorResNet
+
+## 205
+
+steps: 2047000
+exponential decay: 0.999
+GeneratorSRN
+SEUnit: on
+loss: L1 + MS-SSIM
 

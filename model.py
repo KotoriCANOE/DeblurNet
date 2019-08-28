@@ -115,6 +115,8 @@ class Model:
             global_step, lr_step, t_mul=2.0, m_mul=0.9, alpha=1e-1)
         lr_mul = tf.train.exponential_decay(lr_mul, global_step, 1000, 0.999)
             # steps/decay: 2047000/0.999, 1023000/0.998
+        warmup_step = 63000
+        lr_mul *= tf.minimum(1.0, tf.cast(global_step, tf.float32) / warmup_step)
         lr = self.learning_rate * lr_mul
         wd = self.weight_decay * lr_mul
         self.g_train_sums.append(tf.summary.scalar('Generator/LR', lr))

@@ -222,6 +222,31 @@ exponential decay: 0.999
 SEUnit: off
 loss: L1
 
+## 72
+
+[similar to ##67]
+steps: 255000
+channels: [32, 32, 64, 96, 128]
+Added warm up for LR schedule (63000 steps)
+
+## 73
+
+(unchanged)
+steps: 255000
+InBlock & DBlock_0: 32c => 64c
+
+## 74
+
+(unchanged)
+steps: 255000
+channels: [32, 16, 32, 64, 128]
+
+## 75
+
+(unchanged)
+steps: 255000
+channels: [48, 24, 48, 96, 192]
+
 
 ## 200
 

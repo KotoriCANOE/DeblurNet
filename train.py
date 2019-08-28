@@ -259,8 +259,6 @@ def main(argv=None):
     # data parameters
     argp.add_argument('--dtype', type=int, default=2)
     argp.add_argument('--data-format', default='NCHW')
-    argp.add_argument('--patch-height', type=int, default=128)
-    argp.add_argument('--patch-width', type=int, default=128)
     argp.add_argument('--in-channels', type=int, default=3)
     argp.add_argument('--out-channels', type=int, default=3)
     # pre-processing parameters

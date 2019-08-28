@@ -63,23 +63,23 @@ class GeneratorBase(GeneratorConfig):
             dilate, None, None, None, initializer, regularizer, biases,
             variables_collections=collections)
         # skip connection
-        last = layers.SEUnit(last, in_channels, format, regularizer, collections)
+        last = layers.SEUnit(last, None, format, regularizer, collections)
         last += skip
         return last
 
     def EBlock(self, last, channels, resblocks=1,
         kernel=[4, 4], stride=[2, 2], biases=True, format=DATA_FORMAT,
         activation=ACTIVATION, normalizer=None, regularizer=None, collections=None):
-        biases = tf.initializers.zeros(self.dtype) if biases else None
-        initializer = tf.initializers.variance_scaling(
-            1.0, 'fan_in', 'truncated_normal', self.random_seed, self.dtype)
         # pre-activation
         if activation: last = activation(last)
-        # convolution
-        last = slim.conv2d(last, channels, kernel, stride, 'SAME', format,
-            1, None, None, weights_initializer=initializer,
-            weights_regularizer=regularizer, biases_initializer=biases,
-            variables_collections=collections)
+        # down-convolution
+        if stride[-1] > 1:
+            last = layers.conv2d_downscale2d(layers.blur2d(last), channels, kernel[-1])
+        else:
+            last = layers.conv2d(last, channels, kernel[-1])
+        # bias
+        if biases:
+            last = slim.bias_add(last, variables_collections=collections, data_format=format)
         # residual blocks
         for i in range(resblocks):
             with tf.variable_scope('ResBlock_{}'.format(i)):
@@ -91,18 +91,16 @@ class GeneratorBase(GeneratorConfig):
     def DBlock(self, last, channels, resblocks=1,
         kernel=[3, 3], stride=[2, 2], biases=True, format=DATA_FORMAT,
         activation=ACTIVATION, normalizer=None, regularizer=None, collections=None):
-        biases = tf.initializers.zeros(self.dtype) if biases else None
-        initializer = tf.initializers.variance_scaling(
-            1.0, 'fan_in', 'truncated_normal', self.random_seed, self.dtype)
         # pre-activation
         if activation: last = activation(last)
-        # upsample
-        last = self.Resize(last, stride, format)
-        # convolution
-        last = slim.conv2d(last, channels, kernel, [1, 1], 'SAME', format,
-            1, None, None, weights_initializer=initializer,
-            weights_regularizer=regularizer, biases_initializer=biases,
-            variables_collections=collections)
+        # up-convolution
+        if stride[-1] > 1:
+            last = layers.blur2d(layers.upscale2d_conv2d(last, channels, kernel[-1]))
+        else:
+            last = layers.conv2d(last, channels, kernel[-1])
+        # bias
+        if biases:
+            last = slim.bias_add(last, variables_collections=collections, data_format=format)
         # residual blocks
         for i in range(resblocks):
             with tf.variable_scope('ResBlock_{}'.format(i)):
@@ -115,7 +113,7 @@ class GeneratorBase(GeneratorConfig):
         upscale = stride if isinstance(stride, int) else max(stride)
         if upscale <= 1:
             return last
-        with tf.variable_scope('Upsample'):
+        with tf.variable_scope(None, 'Upsample'):
             upsize = tf.shape(last)
             upsize = upsize[-2:] if format == 'NCHW' else upsize[-3:-1]
             upsize = upsize * stride[0:2]

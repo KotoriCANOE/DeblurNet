@@ -1,5 +1,7 @@
 # SRN-DeblurNet Note
 
+---
+
 ## 20
 
 steps: 127000
@@ -224,9 +226,8 @@ loss: L1
 
 ## 72
 
-[similar to ##67]
 steps: 255000
-channels: [32, 32, 64, 96, 128]
+(same as ##67) channels: [32, 32, 64, 96, 128]
 Added warm up for LR schedule (63000 steps)
 
 ## 73
@@ -247,6 +248,52 @@ channels: [32, 16, 32, 64, 128]
 steps: 255000
 channels: [48, 24, 48, 96, 192]
 
+## 76
+
+steps: 1023000
+(same as ##67) ResBlocks: 0, 2, 2, 2, 2, 2, 2, 2, 2
+Anti-aliasing re-sampling with [1, 2, 1] filter
+
+## 77
+
+(unchanged)
+steps: 1023000
+Removed EBlock_0 and DBlock_0
+ResBlocks: 0, 1, 2, 8, 2, 1, 0
+LR: 5e-4
+
+## 78
+
+(unchanged)
+steps: 390000/1023000
+Removed EBlock_0 and DBlock_0
+ResBlocks: 1, 2, 2, 4, 2, 2, 1
+LR: 7e-4
+
+## 79
+
+(chosen)
+steps: 1023000, 2047000
+(same as ##67) ResBlocks: 0, 2, 2, 2, 2, 2, 2, 2, 2
+Anti-aliasing re-sampling without [1, 2, 1] filter
+
+## 80
+
+use a better LR warmup (first linear, then cosine restart, multiply by exponential decay)
+(unchanged)
+steps: 1023000
+Removed EBlock_0 and DBlock_0
+ResBlocks: 2, 2, 2, 2, 2, 2, 2
+LR: 5e-4
+
+## 81
+
+(unchanged)
+steps: 1023000
+DBlocks: ResBlocks last => ResBlocks first
+LR: 7e-4
+
+---
 
 ## 200
 

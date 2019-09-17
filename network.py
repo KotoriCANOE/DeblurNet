@@ -68,19 +68,21 @@ class GeneratorBase(GeneratorConfig):
         return last
 
     def EBlock(self, last, channels, resblocks=1,
-        kernel=[4, 4], stride=[2, 2], biases=True, format=DATA_FORMAT,
+        kernel=[3, 3], stride=[2, 2], biases=True, format=DATA_FORMAT,
         activation=ACTIVATION, normalizer=None, regularizer=None, collections=None):
         # pre-activation
         if activation: last = activation(last)
         # down-convolution
         if stride[-1] > 1:
-            last = layers.conv2d_downscale2d(layers.blur2d(last), channels, kernel[-1])
+            last = layers.conv2d_downscale2d(last, channels, kernel[-1])
+            #last = layers.conv2d_downscale2d(layers.blur2d(last), channels, kernel[-1])
         else:
             last = layers.conv2d(last, channels, kernel[-1])
         # bias
         if biases:
             last = slim.bias_add(last, variables_collections=collections, data_format=format)
         # residual blocks
+        if not activation: activation = ACTIVATION
         for i in range(resblocks):
             with tf.variable_scope('ResBlock_{}'.format(i)):
                 last = self.ResBlock(last, self.res_kernel, biases=False, format=format,
@@ -91,22 +93,24 @@ class GeneratorBase(GeneratorConfig):
     def DBlock(self, last, channels, resblocks=1,
         kernel=[3, 3], stride=[2, 2], biases=True, format=DATA_FORMAT,
         activation=ACTIVATION, normalizer=None, regularizer=None, collections=None):
-        # pre-activation
-        if activation: last = activation(last)
-        # up-convolution
-        if stride[-1] > 1:
-            last = layers.blur2d(layers.upscale2d_conv2d(last, channels, kernel[-1]))
-        else:
-            last = layers.conv2d(last, channels, kernel[-1])
-        # bias
-        if biases:
-            last = slim.bias_add(last, variables_collections=collections, data_format=format)
         # residual blocks
+        if not activation: activation = ACTIVATION
         for i in range(resblocks):
             with tf.variable_scope('ResBlock_{}'.format(i)):
                 last = self.ResBlock(last, self.res_kernel, biases=False, format=format,
                     activation=activation, normalizer=normalizer,
                     regularizer=regularizer, collections=collections)
+        # pre-activation
+        if activation: last = activation(last)
+        # up-convolution
+        if stride[-1] > 1:
+            last = layers.upscale2d_conv2d(last, channels, kernel[-1])
+            #last = layers.blur2d(layers.upscale2d_conv2d(last, channels, kernel[-1]))
+        else:
+            last = layers.conv2d(last, channels, kernel[-1])
+        # bias
+        if biases:
+            last = slim.bias_add(last, variables_collections=collections, data_format=format)
         return last
 
     def Resize(self, last, stride, format=DATA_FORMAT):
@@ -240,15 +244,15 @@ class GeneratorSRN(GeneratorBase):
                 self.biases, format, activation, normalizer, regularizer)
         with tf.variable_scope('EBlock_1'):
             skips.append(last)
-            last = self.EBlock(last, 64, 2, [4, 4], [2, 2],
+            last = self.EBlock(last, 64, 2, [3, 3], [2, 2],
                 self.biases, format, activation, normalizer, regularizer)
         with tf.variable_scope('EBlock_2'):
             skips.append(last)
-            last = self.EBlock(last, 96, 2, [4, 4], [2, 2],
+            last = self.EBlock(last, 96, 2, [3, 3], [2, 2],
                 self.biases, format, activation, normalizer, regularizer)
         with tf.variable_scope('EBlock_3'):
             skips.append(last)
-            last = self.EBlock(last, 128, 2, [4, 4], [2, 2],
+            last = self.EBlock(last, 128, 2, [3, 3], [2, 2],
                 self.biases, format, activation, normalizer, regularizer)
         # decoder
         with tf.variable_scope('DBlock_3'):

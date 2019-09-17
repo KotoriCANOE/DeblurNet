@@ -212,7 +212,7 @@ def GeneratorLoss(fake, loss_type):
 ### Scaling
 
 def _blur2d(x, f=[1,2,1], normalize=True, flip=False, stride=1):
-    assert x.shape.ndims == 4 and all(dim.value is not None for dim in x.shape[1:])
+    assert x.shape.ndims == 4
     assert isinstance(stride, int) and stride >= 1
 
     # Finalize filter kernel.
@@ -241,7 +241,7 @@ def _blur2d(x, f=[1,2,1], normalize=True, flip=False, stride=1):
     return x
 
 def _upscale2d(x, factor=2, gain=1):
-    assert x.shape.ndims == 4 and all(dim.value is not None for dim in x.shape[1:])
+    assert x.shape.ndims == 4
     assert isinstance(factor, int) and factor >= 1
 
     # Apply gain.
@@ -253,14 +253,18 @@ def _upscale2d(x, factor=2, gain=1):
         return x
 
     # Upscale using tf.tile().
-    s = x.shape
+    shape = x.shape.as_list()
+    s = tf.shape(x)
     x = tf.reshape(x, [-1, s[1], s[2], 1, s[3], 1])
     x = tf.tile(x, [1, 1, 1, factor, 1, factor])
     x = tf.reshape(x, [-1, s[1], s[2] * factor, s[3] * factor])
+    x.set_shape([shape[0], shape[1],
+        shape[2] * factor if shape[2] else None,
+        shape[3] * factor if shape[3] else None])
     return x
 
 def _downscale2d(x, factor=2, gain=1):
-    assert x.shape.ndims == 4 and all(dim.value is not None for dim in x.shape[1:])
+    assert x.shape.ndims == 4
     assert isinstance(factor, int) and factor >= 1
 
     # 2x2, float32 => downscale using _blur2d().

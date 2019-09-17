@@ -251,7 +251,7 @@ def main(argv=None):
     argp.add_argument('--train-dir', default='./train{postfix}.tmp')
     argp.add_argument('--restore', action='store_true')
     argp.add_argument('--save-steps', type=int, default=5000)
-    argp.add_argument('--ckpt-period', type=int, default=3600)
+    argp.add_argument('--ckpt-period', type=int, default=1200)
     argp.add_argument('--log-frequency', type=int, default=100)
     argp.add_argument('--log-file', default='train.log')
     argp.add_argument('--batch-size', type=int)

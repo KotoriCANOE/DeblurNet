@@ -1,4 +1,4 @@
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import os
 from utils import eprint, create_session
 from model import Model

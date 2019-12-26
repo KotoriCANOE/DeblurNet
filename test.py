@@ -1,4 +1,4 @@
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import numpy as np
 import os
 from utils import bool_argument, eprint, listdir_files, reset_random, create_session, BatchPNG
@@ -182,7 +182,7 @@ class Test:
 def main(argv=None):
     # arguments parsing
     import argparse
-    argp = argparse.ArgumentParser()
+    argp = argparse.ArgumentParser(argv[0])
     # testing parameters
     argp.add_argument('dataset')
     argp.add_argument('--num-epochs', type=int, default=1)
@@ -204,7 +204,7 @@ def main(argv=None):
     Model.add_arguments(argp)
     argp.add_argument('--scaling', type=int, default=1)
     # parse
-    args = argp.parse_args(argv)
+    args = argp.parse_args(argv[1:])
     Data.parse_arguments(args)
     args.train_dir = args.train_dir.format(postfix=args.postfix)
     args.test_dir = args.test_dir.format(postfix=args.postfix)
@@ -216,4 +216,4 @@ def main(argv=None):
 
 if __name__ == '__main__':
     import sys
-    main(sys.argv[1:])
+    main(sys.argv)

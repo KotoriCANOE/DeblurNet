@@ -1,4 +1,4 @@
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import layers
 from network import GeneratorSRN as Generator
 
@@ -32,6 +32,7 @@ class Model:
     @staticmethod
     def add_arguments(argp):
         # format parameters
+        argp.add_argument('--data-format', default='NCHW')
         argp.add_argument('--input-range', type=int, default=2)
         argp.add_argument('--output-range', type=int, default=2)
         # training parameters
@@ -72,7 +73,7 @@ class Model:
             self.labels.set_shape(self.output_shape)
         # build model
         self.build_model(inputs)
-        # build generator loss
+        # build losses
         self.build_g_loss(self.labels, self.outputs)
 
     def build_g_loss(self, labels, outputs):
@@ -93,10 +94,10 @@ class Model:
             tf.losses.add_loss(ssim_loss * 0.1)
             update_ops.append(self.loss_summary('ssim_loss', ssim_loss, self.g_log_losses))
             # regularization loss
-            # reg_losses = tf.losses.get_regularization_losses('Generator')
-            # reg_loss = tf.add_n(reg_losses)
+            reg_losses = tf.losses.get_regularization_losses('Generator')
+            reg_loss = tf.add_n(reg_losses)
             # tf.losses.add_loss(reg_loss)
-            # update_ops.append(self.loss_summary('reg_loss', reg_loss))
+            update_ops.append(self.loss_summary('reg_loss', reg_loss))
             # final loss
             losses = tf.losses.get_losses(loss_key)
             self.g_loss = tf.add_n(losses, 'total_loss')
@@ -127,7 +128,7 @@ class Model:
         opt = tf.contrib.opt.AdamWOptimizer(wd, lr, beta1=0.9, beta2=0.999)
         with tf.control_dependencies(update_ops):
             grads_vars = opt.compute_gradients(self.g_loss, model.tvars)
-            update_ops = [opt.apply_gradients(grads_vars, global_step)]
+            update_ops = [opt.apply_gradients(grads_vars, global_step, decay_var_list=model.wdvars)]
         # histogram for gradients and variables
         for grad, var in grads_vars:
             self.g_train_sums.append(tf.summary.histogram(var.op.name + '/grad', grad))

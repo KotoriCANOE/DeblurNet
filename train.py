@@ -1,4 +1,4 @@
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import numpy as np
 import os
 from utils import bool_argument, eprint, reset_random, create_session
@@ -152,8 +152,8 @@ class Train:
         import time
         # restore from checkpoint
         if self.restore and os.path.exists(os.path.join(self.train_dir, 'checkpoint')):
-            lastest_ckpt = tf.train.latest_checkpoint(self.train_dir, 'checkpoint')
-            self.saver_ckpt.restore(sess, lastest_ckpt)
+            latest_ckpt = tf.train.latest_checkpoint(self.train_dir, 'checkpoint')
+            self.saver_ckpt.restore(sess, latest_ckpt)
         # otherwise, initialize from start
         else:
             initializers = (tf.initializers.global_variables(),
@@ -238,9 +238,10 @@ class Train:
 def main(argv=None):
     # arguments parsing
     import argparse
-    argp = argparse.ArgumentParser()
+    argp = argparse.ArgumentParser(argv[0])
     # training parameters
     argp.add_argument('dataset')
+    argp.add_argument('--val-dir') # only for packed dataset
     bool_argument(argp, 'debug', False)
     argp.add_argument('--num-epochs', type=int, default=24)
     argp.add_argument('--max-steps', type=int)
@@ -258,7 +259,6 @@ def main(argv=None):
     argp.add_argument('--val-size', type=int, default=256)
     # data parameters
     argp.add_argument('--dtype', type=int, default=2)
-    argp.add_argument('--data-format', default='NCHW')
     argp.add_argument('--in-channels', type=int, default=3)
     argp.add_argument('--out-channels', type=int, default=3)
     # pre-processing parameters
@@ -267,7 +267,7 @@ def main(argv=None):
     Model.add_arguments(argp)
     argp.add_argument('--scaling', type=int, default=1)
     # parse
-    args = argp.parse_args(argv)
+    args = argp.parse_args(argv[1:])
     Data.parse_arguments(args)
     args.train_dir = args.train_dir.format(postfix=args.postfix)
     args.dtype = [tf.int8, tf.float16, tf.float32, tf.float64][args.dtype]
@@ -277,4 +277,4 @@ def main(argv=None):
 
 if __name__ == '__main__':
     import sys
-    main(sys.argv[1:])
+    main(sys.argv)

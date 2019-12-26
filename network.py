@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import tensorflow.contrib.layers as slim
 import layers
 
@@ -13,7 +13,6 @@ class GeneratorConfig:
         # format parameters
         self.dtype = tf.float32
         self.data_format = DATA_FORMAT
-        self.in_channels = 3
         self.out_channels = 3
         # model parameters
         self.biases = False
@@ -24,7 +23,7 @@ class GeneratorConfig:
         # train parameters
         self.random_seed = 0
         self.var_ema = 0.999
-        self.weight_decay = 0#1e-6
+        self.weight_decay = 0 #1e-6
 
 class GeneratorBase(GeneratorConfig):
     __metaclass__ = ABCMeta
@@ -36,6 +35,7 @@ class GeneratorBase(GeneratorConfig):
         self.mvars = None
         self.svars = None
         self.rvars = None
+        self.wdvars = None
         # copy all the properties from config object
         if config is not None:
             self.__dict__.update(config.__dict__)
@@ -47,7 +47,7 @@ class GeneratorBase(GeneratorConfig):
         biases=False, format=DATA_FORMAT,
         dilate=1, activation=ACTIVATION, normalizer=None,
         regularizer=None, collections=None):
-        in_channels = last.shape.as_list()[-3 if format == 'NCHW' else -1]
+        in_channels = last.shape[-3 if format == 'NCHW' else -1].value
         biases = tf.initializers.zeros(self.dtype) if biases else None
         initializer = tf.initializers.variance_scaling(
             1.0, 'fan_in', 'truncated_normal', self.random_seed, self.dtype)
@@ -62,7 +62,7 @@ class GeneratorBase(GeneratorConfig):
         last = slim.conv2d(last, in_channels, kernel, stride, 'SAME', format,
             dilate, None, None, None, initializer, regularizer, biases,
             variables_collections=collections)
-        # skip connection
+        # residual connection
         last = layers.SEUnit(last, None, format, regularizer)
         last += skip
         return last
@@ -74,8 +74,8 @@ class GeneratorBase(GeneratorConfig):
         if activation: last = activation(last)
         # down-convolution
         if stride[-1] > 1:
+            # last = layers.blur2d(last)
             last = layers.conv2d_downscale2d(last, channels, kernel[-1])
-            # last = layers.conv2d_downscale2d(layers.blur2d(last), channels, kernel[-1])
         else:
             last = layers.conv2d(last, channels, kernel[-1])
         # bias
@@ -105,7 +105,7 @@ class GeneratorBase(GeneratorConfig):
         # up-convolution
         if stride[-1] > 1:
             last = layers.upscale2d_conv2d(last, channels, kernel[-1])
-            # last = layers.blur2d(layers.upscale2d_conv2d(last, channels, kernel[-1]))
+            # last = layers.blur2d(last)
         else:
             last = layers.conv2d(last, channels, kernel[-1])
         # bias
@@ -151,8 +151,8 @@ class GeneratorBase(GeneratorConfig):
         elif self.normalization == 'Instance':
             normalizer = lambda x: slim.instance_norm(x, center=True, scale=True, data_format=format)
         elif self.normalization == 'Group':
-            normalizer = lambda x: (slim.group_norm(x, x.shape.as_list()[-3] // 16, -3, (-2, -1))
-                if format == 'NCHW' else slim.group_norm(x, x.shape.as_list()[-1] // 16, -1, (-3, -2)))
+            normalizer = lambda x: (slim.group_norm(x, x.shape[-3].value // 16, -3, (-2, -1))
+                if format == 'NCHW' else slim.group_norm(x, x.shape[-1].value // 16, -1, (-3, -2)))
         else:
             normalizer = None
         regularizer = slim.l2_regularizer(self.weight_decay) if self.weight_decay else None
@@ -164,9 +164,11 @@ class GeneratorBase(GeneratorConfig):
         # trainable/model/save/restore variables
         self.tvars = tf.trainable_variables(self.name)
         self.mvars = tf.model_variables(self.name)
-        self.mvars = [i for i in self.mvars if i not in self.tvars]
+        self.mvars = [var for var in self.mvars if var not in self.tvars]
         self.svars = list(set(self.tvars + self.mvars))
         self.rvars = self.svars.copy()
+        # variables that should be affected by weight decay
+        self.wdvars = [var for var in self.tvars if 'weight' in var.name.split('/')[-1]]
         # restore moving average of trainable variables
         if self.var_ema > 0:
             with tf.variable_scope('EMA'):
@@ -177,6 +179,7 @@ class GeneratorBase(GeneratorConfig):
 
 class GeneratorResNet(GeneratorBase):
     def def_model(self, last, activation, normalizer, regularizer):
+        # parameters
         format = self.data_format
         skip_connection = lambda x, y: x + y
         # skip stack
@@ -229,6 +232,7 @@ class GeneratorResNet(GeneratorBase):
 
 class GeneratorSRN(GeneratorBase):
     def def_model(self, last, activation, normalizer, regularizer):
+        # parameters
         format = self.data_format
         skip_connection = lambda x, y: x + y
         # skip stack
@@ -315,6 +319,7 @@ class GeneratorResUNet(GeneratorBase):
         return last
 
     def def_model(self, last, activation, normalizer, regularizer):
+        # parameters
         format = self.data_format
         skip_connection = lambda x, y: x + y
         # skip stack

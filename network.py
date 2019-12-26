@@ -63,7 +63,7 @@ class GeneratorBase(GeneratorConfig):
             dilate, None, None, None, initializer, regularizer, biases,
             variables_collections=collections)
         # skip connection
-        last = layers.SEUnit(last, None, format, regularizer, collections)
+        last = layers.SEUnit(last, None, format, regularizer)
         last += skip
         return last
 
@@ -75,18 +75,18 @@ class GeneratorBase(GeneratorConfig):
         # down-convolution
         if stride[-1] > 1:
             last = layers.conv2d_downscale2d(last, channels, kernel[-1])
-            #last = layers.conv2d_downscale2d(layers.blur2d(last), channels, kernel[-1])
+            # last = layers.conv2d_downscale2d(layers.blur2d(last), channels, kernel[-1])
         else:
             last = layers.conv2d(last, channels, kernel[-1])
         # bias
         if biases:
             last = slim.bias_add(last, variables_collections=collections, data_format=format)
         # residual blocks
-        if not activation: activation = ACTIVATION
+        activation_res = ACTIVATION if activation is None else activation
         for i in range(resblocks):
             with tf.variable_scope('ResBlock_{}'.format(i)):
                 last = self.ResBlock(last, self.res_kernel, biases=False, format=format,
-                    activation=activation, normalizer=normalizer,
+                    activation=activation_res, normalizer=normalizer,
                     regularizer=regularizer, collections=collections)
         return last
 
@@ -94,18 +94,18 @@ class GeneratorBase(GeneratorConfig):
         kernel=[3, 3], stride=[2, 2], biases=True, format=DATA_FORMAT,
         activation=ACTIVATION, normalizer=None, regularizer=None, collections=None):
         # residual blocks
-        if not activation: activation = ACTIVATION
+        activation_res = ACTIVATION if activation is None else activation
         for i in range(resblocks):
             with tf.variable_scope('ResBlock_{}'.format(i)):
                 last = self.ResBlock(last, self.res_kernel, biases=False, format=format,
-                    activation=activation, normalizer=normalizer,
+                    activation=activation_res, normalizer=normalizer,
                     regularizer=regularizer, collections=collections)
         # pre-activation
         if activation: last = activation(last)
         # up-convolution
         if stride[-1] > 1:
             last = layers.upscale2d_conv2d(last, channels, kernel[-1])
-            #last = layers.blur2d(layers.upscale2d_conv2d(last, channels, kernel[-1]))
+            # last = layers.blur2d(layers.upscale2d_conv2d(last, channels, kernel[-1]))
         else:
             last = layers.conv2d(last, channels, kernel[-1])
         # bias
@@ -297,10 +297,11 @@ class GeneratorResUNet(GeneratorBase):
         initializer = tf.initializers.variance_scaling(
             1.0, 'fan_in', 'truncated_normal', self.random_seed, self.dtype)
         # residual blocks
+        activation_res = ACTIVATION if activation is None else activation
         for i in range(resblocks):
             with tf.variable_scope('ResBlock_{}'.format(i)):
                 last = self.ResBlock(last, self.res_kernel, biases=False, format=format,
-                    activation=activation, normalizer=normalizer,
+                    activation=activation_res, normalizer=normalizer,
                     regularizer=regularizer, collections=collections)
         # pre-activation
         if activation: last = activation(last)

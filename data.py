@@ -131,7 +131,8 @@ class DataBase:
         # return
         return inputs, labels
 
-    def extract_batch_packed(self, batch_set):
+    @classmethod
+    def extract_batch_packed(cls, batch_set):
         with np.load(batch_set) as npz:
             inputs = npz['inputs']
             labels = npz['labels']
@@ -177,7 +178,7 @@ class DataBase:
                 step_start = max(0, start - step_offset)
                 step_stop = min(epoch_steps, max_steps - step_offset)
                 # random shuffle
-                if shuffle and epoch > 0:
+                if shuffle:
                     random.shuffle(_dataset)
                 # loop over steps within an epoch
                 for step in range(step_start, step_stop):

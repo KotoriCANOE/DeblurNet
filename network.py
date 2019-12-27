@@ -23,7 +23,7 @@ class GeneratorConfig:
         # train parameters
         self.random_seed = 0
         self.var_ema = 0.999
-        self.weight_decay = 0 #1e-6
+        self.weight_decay = 1e-6
 
 class GeneratorBase(GeneratorConfig):
     __metaclass__ = ABCMeta

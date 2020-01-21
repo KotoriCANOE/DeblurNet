@@ -40,7 +40,7 @@ def PReLU(last, format=None, collections=None, dtype=tf.float32, scope=None):
         last = tf.maximum(0.0, last) + alpha * tf.minimum(0.0, last)
     return last
 
-def SEUnit(last, channels=None, format=None, regularizer=None, scope=None):
+def SEUnit(last, channels=None, format=None, scope=None):
     if format is None:
         format = DATA_FORMAT
     in_channels = int(last.shape[format_select(format, 1, -1)])
@@ -49,10 +49,8 @@ def SEUnit(last, channels=None, format=None, regularizer=None, scope=None):
     with tf.variable_scope(scope, 'SEUnit'):
         skip = last
         last = tf.reduce_mean(last, format_select(format, [-2, -1], [-3, -2]))
-        last = tf.keras.layers.Dense(channels, tf.nn.relu,
-            kernel_regularizer=regularizer)(last)
-        last = tf.keras.layers.Dense(in_channels, tf.nn.sigmoid,
-            kernel_regularizer=regularizer)(last)
+        last = dense(last, channels, tf.nn.relu)
+        last = dense(last, in_channels, tf.nn.sigmoid)
         hw_idx = format_select(format, -1, -2)
         last = tf.expand_dims(tf.expand_dims(last, hw_idx), hw_idx)
         last = tf.multiply(skip, last)
@@ -403,18 +401,28 @@ def get_weight(shape, gain=np.sqrt(2), use_wscale=False, lrmul=1):
 
     # Create variable.
     init = tf.initializers.random_normal(0, init_std)
-    return tf.get_variable('weight', shape=shape, initializer=init) * runtime_coef
+    return tf.get_variable('weight', shape=shape, initializer=init, trainable=True) * runtime_coef
 
 #----------------------------------------------------------------------------
 # Fully-connected layer.
 
-def dense(x, channels, **kwargs):
+def dense(x, channels, activation=None, normalizer=None, bias=True, **kwargs):
     if len(x.shape) > 2:
         x = tf.reshape(x, [-1, np.prod([d.value for d in x.shape[1:]])])
     with tf.variable_scope(None, 'Dense'):
         w = get_weight([x.shape[-1].value, channels], **kwargs)
         w = tf.cast(w, x.dtype)
-        return tf.matmul(x, w)
+        y = tf.matmul(x, w)
+        if normalizer is not None:
+            y = normalizer(y)
+        elif bias:
+            init = tf.initializers.zeros()
+            b = tf.get_variable('bias', shape=(channels,), initializer=init, trainable=True)
+            b = tf.cast(b, x.dtype)
+            y = tf.nn.bias_add(y, b)
+        if activation is not None:
+            y = activation(y)
+        return y
 
 #----------------------------------------------------------------------------
 # Convolutional layer.

@@ -168,7 +168,8 @@ class GeneratorBase(GeneratorConfig):
         self.svars = list(set(self.tvars + self.mvars))
         self.rvars = self.svars.copy()
         # variables that should be affected by weight decay
-        self.wdvars = [var for var in self.tvars if 'weight' in var.name.split('/')[-1]]
+        import re
+        self.wdvars = [var for var in self.tvars if re.findall(r'weight|kernel', var.name.split('/')[-1])]
         # restore moving average of trainable variables
         if self.var_ema > 0:
             with tf.variable_scope('EMA'):

@@ -164,6 +164,7 @@ class Train:
             latest_ckpt = tf.train.latest_checkpoint(self.pretrain_dir, 'checkpoint')
             self.saver_pt.restore(sess, latest_ckpt)
         # profiler
+        # profile_offset = -1
         profile_offset = 100 + self.log_frequency // 2
         profile_step = 10000
         builder = tf.profiler.ProfileOptionBuilder

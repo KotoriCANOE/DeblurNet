@@ -216,7 +216,6 @@ class DataBase:
 class DataImage(DataBase):
     def get_files_origin(self):
         data_list = listdir_files(self.dataset, recursive=True, filter_ext=['.npz'])
-        data_list.sort()
         # return
         if self.shuffle:
             random.shuffle(data_list)

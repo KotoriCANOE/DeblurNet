@@ -481,3 +481,55 @@ def conv2d_downscale2d(x, channels, kernel, fused_scale='auto', format=DATA_FORM
         return tf.nn.conv2d(x, w, strides=strides, padding='SAME', data_format=format)
 
 ################################################################
+
+def ExpCosineRestartsDecay(lr, global_step, lr_step=1000, m_mul=0.9, exp_decay=0.998, warmup_cycle=0):
+    # steps/exp_decay: 2047000/0.999, 1023000/0.998
+    # warmup_cycle: 3
+    lr_mul = tf.train.cosine_decay_restarts(1.0,
+        global_step, lr_step, t_mul=2.0, m_mul=m_mul, alpha=1e-1)
+    if warmup_cycle > 0:
+        warmup_step = ((1 << warmup_cycle) - 1) * lr_step
+        lr_mul = tf.cond(global_step >= warmup_step, lambda: lr_mul,
+            lambda: tf.cast(global_step, tf.float32) / warmup_step * (m_mul ** warmup_cycle))
+    lr_mul = tf.train.exponential_decay(lr_mul, global_step, 1000, exp_decay)
+    return lr * lr_mul
+
+def PlateauDecay(lr, global_step, loss, factor=0.5, window=5000, min_delta=-0.005, min_mul=1e-4):
+    with tf.variable_scope(None, 'PlateauDecay'):
+        # initialize variables
+        lr_mul = tf.Variable(1.0, trainable=False, name='LRMultiplier')
+        loss_sum = tf.Variable(float('inf'), trainable=False, name='LossSum')
+        loss_count = tf.Variable(1.0, trainable=False, name='LossCount')
+        loss_mean = tf.Variable(float('inf'), trainable=False, name='LossMean')
+        loss_last = tf.Variable(float('inf'), trainable=False, name='LossMeanLast')
+        # LR multiplier
+        def DecayJudge():
+            # calculate mean
+            new_loss_last = loss_last.assign(loss_mean, use_locking=True)
+            with tf.control_dependencies([new_loss_last]):
+                new_loss_mean = loss_mean.assign(loss_sum / loss_count, use_locking=True)
+            with tf.control_dependencies([new_loss_mean]):
+                clear_sum = loss_sum.assign(0.0, use_locking=True)
+                clear_count = loss_count.assign(0.0, use_locking=True)
+            with tf.control_dependencies([clear_sum, clear_count]):
+                cal_mean = tf.no_op('CalculateMean')
+            # decay judge
+            with tf.control_dependencies([cal_mean]):
+                print_op = tf.print('last loss mean: ', new_loss_last, '\nloss mean: ', new_loss_mean)
+            with tf.control_dependencies([print_op]):
+                decay_on = new_loss_mean * (1 + min_delta) > new_loss_last
+            new_lr_mul = tf.cond(decay_on, lambda: tf.math.maximum(min_mul, lr_mul * factor), lambda: lr_mul)
+            print_op = tf.print('new LR multiplier: ', new_lr_mul)
+            with tf.control_dependencies([print_op]):
+                return lr_mul.assign(new_lr_mul, use_locking=True)
+        new_lr_mul = tf.cond(tf.equal(global_step % window, 0), DecayJudge, lambda: lr_mul)
+        # accumulate to sum and count
+        with tf.control_dependencies([new_lr_mul]):
+            acc_sum = loss_sum.assign_add(loss, use_locking=True)
+            acc_count = loss_count.assign_add(1.0, use_locking=True)
+        with tf.control_dependencies([acc_sum, acc_count]):
+            lr = lr * new_lr_mul
+        # return decayed learning rate
+        return lr
+
+################################################################

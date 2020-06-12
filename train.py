@@ -64,7 +64,7 @@ class Train:
             self.model.build_train()
             self.global_step = tf.train.get_or_create_global_step()
             self.g_train_op = self.model.train_g(self.global_step)
-            self.g_train_summary, self.loss_summary = self.model.get_summaries()
+            self.loss_summary, self.g_train_summary = self.model.get_summaries()
 
     def build_saver(self):
         # a Saver object to restore the variables with mappings

@@ -111,16 +111,9 @@ class Model:
         # dependencies to be updated
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, 'Generator')
         # learning rate
-        lr_step = 1000
-        m_mul = 0.9
-        warmup_cycle = 6
-        warmup_step = ((1 << warmup_cycle) - 1) * lr_step
-        lr_mul = tf.train.cosine_decay_restarts(1.0,
-            global_step, lr_step, t_mul=2.0, m_mul=m_mul, alpha=1e-1)
-        lr_mul = tf.cond(global_step >= warmup_step, lambda: lr_mul,
-            lambda: tf.cast(global_step, tf.float32) / warmup_step * (m_mul ** warmup_cycle))
-        lr_mul = tf.train.exponential_decay(lr_mul, global_step, 1000, 0.999)
-            # steps/decay: 2047000/0.999, 1023000/0.998
+        # steps/decay: 2047000/0.999, 1023000/0.998
+        lr_mul = layers.ExpCosineRestartsDecay(1.0, global_step, exp_decay=0.998, warmup_cycle=6)
+        # lr_mul = layers.PlateauDecay(1.0, global_step, self.g_loss)
         lr = self.learning_rate * lr_mul
         wd = self.weight_decay * lr_mul
         self.g_train_sums.append(tf.summary.scalar('Generator/LR', lr))
@@ -166,6 +159,6 @@ class Model:
                 return tf.identity(loss, 'loss')
 
     def get_summaries(self):
-        g_train_summary = tf.summary.merge(self.g_train_sums) if self.g_train_sums else None
         loss_summary = tf.summary.merge(self.loss_sums) if self.loss_sums else None
-        return g_train_summary, loss_summary
+        g_train_summary = tf.summary.merge(self.g_train_sums) if self.g_train_sums else None
+        return loss_summary, g_train_summary

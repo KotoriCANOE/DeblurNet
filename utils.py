@@ -80,6 +80,7 @@ def listdir_files(path, recursive=True, filter_ext=None, encoding=None):
                     eprint(file_path)
                     eprint(err)
         if not recursive: break
+    files.sort()
     return files
 
 # reset random seeds
@@ -90,12 +91,13 @@ def reset_random(seed=0):
     np.random.seed(seed)
 
 # setup tensorflow and return session
-def create_session(graph=None, debug=False):
+def create_session(graph=None, debug=False, memory_fraction=1.0):
     # create session
-    gpu_options = tf.GPUOptions(allow_growth=True)
+    gpu_options = tf.GPUOptions(allow_growth=True,
+        per_process_gpu_memory_fraction=memory_fraction)
     config = tf.ConfigProto(gpu_options=gpu_options,
         allow_soft_placement=True, log_device_placement=False)
-    config.graph_options.optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
+    #config.graph_options.optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
     sess = tf.Session(graph=graph, config=config)
     if debug:
         from tensorflow.python import debug as tfdbg

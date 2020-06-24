@@ -295,6 +295,130 @@ LR: 7e-4
 
 ---
 
+VDSR (20 conv layers)
+
+## 100
+
+steps: 255000
+activation: ReLU
+cosine restarts (warmup_cycle=6)
+exp decay: 0.998
+LR: 1e-3
+
+## 101, 102
+
+steps: 255000
+activation: ReLU
+cosine restarts (warmup_cycle=0)
+exp decay: 0.998
+LR: 1e-3
+
+## 103
+
+steps: 255000
+activation: Swish
+cosine restarts (warmup_cycle=0)
+exp decay: 0.998
+LR: 1e-3
+
+## 104
+
+steps: 255000
+activation: ReLU
+cosine restarts (warmup_cycle=0)
+exp decay: 0.998
+LR: 1e-3
+grad clip: 0.05
+
+## 105
+
+steps: 255000
+activation: ReLU
+cosine restarts (warmup_cycle=6)
+exp decay: 0.998
+LR: 1e-2
+grad clip: 0.05
+
+## 106
+
+steps: 255000
+activation: ReLU
+cosine restarts (warmup_cycle=6)
+exp decay: 0.998
+LR: 2e-3
+grad clip: 0.1
+
+## 107
+
+steps: 255000
+activation: ReLU
+cosine restarts (warmup_cycle=6)
+exp decay: 0.998
+LR: 1e-3
+grad clip: 0.1
+
+---
+
+SRN
+
+## 108
+
+(good)
+steps: 511000
+cosine restarts (warmup_cycle=6)
+exp decay: 0.998
+LR: 1e-3
+grad clip: 0.1
+
+## 109
+
+(good)
+steps: 511000
+LR: 1e-3
+grad clip: 0.2
+
+## 110
+
+steps: 511000
+LR: 1e-3
+grad clip: 0.05
+
+## 111
+
+(unstable)
+steps: 511000
+LR: 1e-3
+grad clip: 0
+
+## 112
+
+(failed)
+steps: 511000
+LR: 2e-3
+grad clip: 0.1
+
+## 113
+
+steps: 511000
+LR: 1e-3
+grad clip: -0.4
+(soft clipping)
+
+## 114
+
+(chosen)
+steps: 511000
+LR: 1e-3
+grad clip: -0.2
+
+## 115
+
+steps: 511000
+LR: 1e-3
+grad clip: -0.1
+
+---
+
 ## 200
 
 SR

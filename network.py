@@ -185,11 +185,14 @@ class GeneratorVDSR(GeneratorBase):
         skips = []
         # network
         skips.append(last)
-        for _ in range(19):
-            last = layers.conv2d(last, 64, 3, format=format)
-            last = tf.nn.relu(last)
-        last = layers.conv2d(last, self.out_channels, 3, format=format)
-        last += skips.pop()
+        for i in range(19):
+            with tf.variable_scope('Conv_{}'.format(i + 1)):
+                last = layers.conv2d(last, 64, 3, format=format)
+                last = tf.nn.relu(last)
+        i += 1
+        with tf.variable_scope('Conv_{}'.format(i + 1)):
+            last = layers.conv2d(last, self.out_channels, 3, format=format)
+            last += skips.pop()
         # return
         return last
 

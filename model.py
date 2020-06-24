@@ -1,4 +1,5 @@
 import tensorflow.compat.v1 as tf
+from tensorflow import contrib
 import layers
 from network import GeneratorSRN as Generator
 
@@ -39,6 +40,7 @@ class Model:
         argp.add_argument('--learning-rate', type=float, default=1e-3)
         argp.add_argument('--weight-decay', type=float, default=5e-5)
         argp.add_argument('--var-ema', type=float, default=0.999)
+        argp.add_argument('--grad-clip', type=float, default=-0.2) # 0.2|-0.2
 
     def build_model(self, inputs=None):
         # inputs
@@ -112,16 +114,28 @@ class Model:
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, 'Generator')
         # learning rate
         # steps/decay: 2047000/0.999, 1023000/0.998
-        lr_mul = layers.ExpCosineRestartsDecay(1.0, global_step, exp_decay=0.998, warmup_cycle=6)
+        lr_mul = layers.ExpCosineRestartsDecay(1.0, global_step, exp_decay=0.998, warmup_cycle=6) # cycle=6
         # lr_mul = layers.PlateauDecay(1.0, global_step, self.g_loss)
         lr = self.learning_rate * lr_mul
         wd = self.weight_decay * lr_mul
         self.g_train_sums.append(tf.summary.scalar('Generator/LR', lr))
         # optimizer
-        opt = tf.contrib.opt.AdamWOptimizer(wd, lr, beta1=0.9, beta2=0.999)
+        opt = contrib.opt.AdamWOptimizer(wd, lr, beta1=0.9, beta2=0.999)
         with tf.control_dependencies(update_ops):
             grads_vars = opt.compute_gradients(self.g_loss, model.tvars)
-            update_ops = [opt.apply_gradients(grads_vars, global_step, decay_var_list=model.wdvars)]
+        # gradient clipping
+        with tf.variable_scope(None, 'GradientClipping'):
+            _grads, _vars = zip(*grads_vars)
+            global_norm = tf.linalg.global_norm(_grads)
+            if self.grad_clip > 0: # hard clipping
+                _grads, _ = tf.clip_by_global_norm(_grads, self.grad_clip, use_norm=global_norm)
+            elif self.grad_clip < 0: # soft clipping
+                grad_clip = -self.grad_clip
+                scale = grad_clip / (global_norm + grad_clip)
+                _grads = [grad * scale for grad in _grads]
+            grads_vars = list(zip(_grads, _vars))
+        self.g_train_sums.append(tf.summary.scalar('Generator/grad_global_norm', global_norm))
+        update_ops = [opt.apply_gradients(grads_vars, global_step, decay_var_list=model.wdvars)]
         # histogram for gradients and variables
         for grad, var in grads_vars:
             self.g_train_sums.append(tf.summary.histogram(var.op.name + '/grad', grad))

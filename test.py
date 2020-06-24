@@ -195,7 +195,6 @@ def main(argv=None):
     argp.add_argument('--batch-size', type=int)
     # data parameters
     argp.add_argument('--dtype', type=int, default=2)
-    argp.add_argument('--data-format', default='NCHW')
     argp.add_argument('--in-channels', type=int, default=3)
     argp.add_argument('--out-channels', type=int, default=3)
     # pre-processing parameters

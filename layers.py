@@ -482,15 +482,22 @@ def conv2d_downscale2d(x, channels, kernel, fused_scale='auto', format=DATA_FORM
 
 ################################################################
 
-def ExpCosineRestartsDecay(lr, global_step, lr_step=1000, m_mul=0.9, exp_decay=0.998, warmup_cycle=0):
-    # steps/exp_decay: 2047000/0.999, 1023000/0.998
-    # warmup_cycle: 3
-    lr_mul = tf.train.cosine_decay_restarts(1.0,
-        global_step, lr_step, t_mul=2.0, m_mul=m_mul, alpha=1e-1)
-    if warmup_cycle > 0:
+def ExpCosineRestartsDecay(lr, global_step, lr_step=1000, m_mul=0.9, alpha=0.1,
+    exp_decay=0.998, warmup_cycle=0, fix_lr=False):
+    if warmup_cycle > 0: # with warm up
         warmup_step = ((1 << warmup_cycle) - 1) * lr_step
+        warmup_lr = (1 - alpha) * (m_mul ** warmup_cycle) + alpha
+        # cosine restarts
+        # fix_lr scales the base LR to make sure the highest LR (after warm up) equals the given LR
+        lr_mul = 1.0 / warmup_lr if fix_lr else 1.0
+        lr_mul = tf.train.cosine_decay_restarts(lr_mul,
+            global_step, lr_step, t_mul=2.0, m_mul=m_mul, alpha=alpha)
+        # warm up
         lr_mul = tf.cond(global_step >= warmup_step, lambda: lr_mul,
-            lambda: tf.cast(global_step, tf.float32) / warmup_step * (m_mul ** warmup_cycle))
+            lambda: tf.cast(global_step, tf.float32) / warmup_step * (1.0 if fix_lr else warmup_lr))
+    else: # without warm up
+        lr_mul = tf.train.cosine_decay_restarts(1.0,
+            global_step, lr_step, t_mul=2.0, m_mul=m_mul, alpha=alpha)
     lr_mul = tf.train.exponential_decay(lr_mul, global_step, 1000, exp_decay)
     return lr * lr_mul
 

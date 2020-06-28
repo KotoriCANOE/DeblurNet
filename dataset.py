@@ -3,6 +3,7 @@ import random
 import numpy as np
 from scipy import ndimage
 from PIL import Image
+from time import time
 import zimg
 from utils import eprint, reset_random, listdir_files, bool_argument
 
@@ -355,25 +356,37 @@ class DataWriter:
         # execute pre-process
         from concurrent.futures import ProcessPoolExecutor
         with ProcessPoolExecutor(config.processes) as executor:
-            futures = []
             for epoch in range(epochs):
                 # create directory for each epoch
                 odir = os.path.join(config.save_dir, '{:0>{width}}'.format(epoch, width=len(str(epochs))))
                 if not os.path.exists(odir):
+                    print('Create directory: ', odir)
                     os.makedirs(odir)
                 # randomly shuffle for each epoch
                 if config.shuffle == 2:
                     random.shuffle(_dataset)
                 # loop over the steps and append the calls
+                futures = []
                 for step in range(epoch_steps):
                     ifile = _dataset[step]
-                    ofile = os.path.join(odir, '{:0>{width}}'.format(step, width=len(str(epoch_steps))))
+                    ofile = os.path.join(odir, '{:0>{width}}.npz'.format(step, width=len(str(epoch_steps))))
                     # skip existing files
                     if not os.path.exists(ofile):
                         futures.append(executor.submit(cls.process, config, ifile, ofile))
+                    else:
+                        print('Skip {}'.format(ofile))
                 # execute the calls
+                step = 0
+                tick = time()
                 for future in futures:
                     future.result()
+                    # log speed every log_freq, always log speed at the end of each epoch
+                    if (config.log_freq > 0 and step % config.log_freq == 0) or (step == len(futures) - 1):
+                        tock = time()
+                        speed = config.log_freq / max(1e-9, tock - tick)
+                        print('Epoch {} Step {}: {} samples/sec'.format(epoch, step, speed))
+                        tick = time()
+                    step += 1
 
     def __call__(self):
         self.initialize(self.config)
@@ -388,6 +401,7 @@ def main(argv):
     argp.add_argument('--random-seed', type=int)
     argp.add_argument('--epochs', type=int, default=1)
     argp.add_argument('--shuffle', type=int, default=1) # 0: no shuffle, 1: shuffle once, 2: shuffle every epoch
+    argp.add_argument('--log-freq', type=int, default=1000)
     argp.add_argument('--processes', type=int, default=8)
     argp.add_argument('--dtype', default='uint8')
     argp.add_argument('--pre-down', type=bool, default=1)

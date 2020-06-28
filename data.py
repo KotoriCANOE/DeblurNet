@@ -121,8 +121,8 @@ class DataBase:
         # load all the data
         for file in batch_set:
             with np.load(file) as npz:
-                _input = npz['inputs']
-                _label = npz['labels']
+                _input = npz['input']
+                _label = npz['label']
             inputs.append(_input)
             labels.append(_label)
         # stack data to form a batch (NCHW)

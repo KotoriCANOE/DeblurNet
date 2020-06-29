@@ -339,23 +339,41 @@ class DataWriter:
         return dataset
 
     @staticmethod
-    def process(config, ifile, ofile):
-        im = Image.open(ifile)
-        img = np.array(im, copy=False)
-        _input, _label = pre_process(config, img, np.dtype(config.dtype))
-        np.savez_compressed(ofile, input=_input, label=_label)
+    def process(config, ifiles, ofile):
+        dtype = np.dtype(config.dtype)
+        inputs = []
+        labels = []
+        for ifile in ifiles:
+            try:
+                im = Image.open(ifile)
+                img = np.array(im, copy=False)
+                _input, _label = pre_process(config, img, dtype)
+                inputs.append(_input)
+                labels.append(_label)
+            except Exception as err:
+                print('======\nError when processing {}\n{}\n------'.format(ifile, err))
+                # fill zero for data with error
+                _blank = np.zeros((3, config.patch_height, config.patch_width), dtype)
+                inputs.append(_blank)
+                labels.append(_blank)
+        # CHW => NCHW
+        inputs = np.stack(inputs, axis=0)
+        labels = np.stack(labels, axis=0)
+        np.savez_compressed(ofile, inputs=inputs, labels=labels)
 
     @classmethod
     def run(cls, config, dataset):
         _dataset = dataset.copy()
         epochs = config.epochs
-        epoch_steps = len(_dataset)
+        epoch_steps = len(_dataset) // config.batch_size
+        step_width = len(str(epoch_steps))
         # pre-shuffle the dataset
         if config.shuffle == 1:
             random.shuffle(_dataset)
         # execute pre-process
         from concurrent.futures import ProcessPoolExecutor
         with ProcessPoolExecutor(config.processes) as executor:
+            skipped = 0
             for epoch in range(epochs):
                 # create directory for each epoch
                 odir = os.path.join(config.save_dir, '{:0>{width}}'.format(epoch, width=len(str(epochs))))
@@ -365,16 +383,21 @@ class DataWriter:
                 # randomly shuffle for each epoch
                 if config.shuffle == 2:
                     random.shuffle(_dataset)
-                # loop over the steps and append the calls
+                # loop over the batches and append the calls
                 futures = []
                 for step in range(epoch_steps):
-                    ifile = _dataset[step]
-                    ofile = os.path.join(odir, '{:0>{width}}.npz'.format(step, width=len(str(epoch_steps))))
+                    begin = step * config.batch_size
+                    end = begin + config.batch_size
+                    ifiles = _dataset[begin : end]
+                    ofile = os.path.join(odir, '{:0>{width}}.npz'.format(step, width=step_width))
                     # skip existing files
                     if not os.path.exists(ofile):
-                        futures.append(executor.submit(cls.process, config, ifile, ofile))
+                        if skipped > 0:
+                            print('Skipped {} existed output files'.format(skipped))
+                            skipped = 0
+                        futures.append(executor.submit(cls.process, config, ifiles, ofile))
                     else:
-                        print('Skip {}'.format(ofile))
+                        skipped += 1
                 # execute the calls
                 step = 0
                 tick = time()
@@ -383,7 +406,7 @@ class DataWriter:
                     # log speed every log_freq, always log speed at the end of each epoch
                     if (config.log_freq > 0 and step % config.log_freq == 0) or (step == len(futures) - 1):
                         tock = time()
-                        speed = config.log_freq / max(1e-9, tock - tick)
+                        speed = (config.batch_size * config.log_freq) / max(1e-9, tock - tick)
                         print('Epoch {} Step {}: {} samples/sec'.format(epoch, step, speed))
                         tick = time()
                     step += 1
@@ -399,8 +422,9 @@ def main(argv):
     argp.add_argument('input_dir')
     argp.add_argument('save_dir')
     argp.add_argument('--random-seed', type=int)
+    argp.add_argument('--batch-size', type=int, default=1)
     argp.add_argument('--epochs', type=int, default=1)
-    argp.add_argument('--shuffle', type=int, default=1) # 0: no shuffle, 1: shuffle once, 2: shuffle every epoch
+    argp.add_argument('--shuffle', type=int, default=2) # 0: no shuffle, 1: shuffle once, 2: shuffle every epoch
     argp.add_argument('--log-freq', type=int, default=1000)
     argp.add_argument('--processes', type=int, default=8)
     argp.add_argument('--dtype', default='uint8')

@@ -3,6 +3,7 @@ import numpy as np
 import os
 import random
 from utils import bool_argument, eprint, listdir_files
+from dataset import convert_dtype
 
 # ======
 # base class
@@ -118,24 +119,32 @@ class DataBase:
         # initialize
         inputs = []
         labels = []
-        # load all the data
+        # load all data in the batch
         for file in batch_set:
             with np.load(file) as npz:
-                _input = npz['input']
-                _label = npz['label']
+                _input = npz['inputs']
+                _label = npz['labels']
             inputs.append(_input)
             labels.append(_label)
-        # stack data to form a batch (NCHW)
-        inputs = np.stack(inputs)
-        labels = np.stack(labels)
+        # concat data to form a batch (NCHW)
+        inputs = np.concatenate(inputs, axis=0)
+        labels = np.concatenate(labels, axis=0)
+        # convert to float32
+        inputs = convert_dtype(inputs, np.float32)
+        labels = convert_dtype(labels, np.float32)
         # return
         return inputs, labels
 
     @classmethod
     def extract_batch_packed(cls, batch_set):
+        # load the batch
         with np.load(batch_set) as npz:
             inputs = npz['inputs']
             labels = npz['labels']
+        # convert to float32
+        inputs = convert_dtype(inputs, np.float32)
+        labels = convert_dtype(labels, np.float32)
+        # return
         return inputs, labels
 
     def _gen_batches_packed(self, dataset, epoch_steps, num_epochs=1, start=0,

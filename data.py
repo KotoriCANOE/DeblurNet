@@ -3,7 +3,31 @@ import numpy as np
 import os
 import random
 from utils import bool_argument, eprint, listdir_files
-from dataset import convert_dtype
+
+def convert_dtype(img, dtype):
+    if dtype == img.dtype: # skip same type
+        return img
+    elif dtype == np.float32:
+        if img.dtype == np.uint8:
+            img = np.float32(img) * (1 / 255)
+        elif img.dtype == np.uint16:
+            img = np.float32(img) * (1 / 65535)
+        elif img.dtype != np.float32:
+            img = np.float32(img)
+    elif dtype == np.uint16:
+        if img.dtype == np.uint8:
+            img = np.uint16(img) * 255
+        elif img.dtype != np.uint16:
+            img = np.clip(img, 0, 1)
+            img = np.uint16(img * 65535 + 0.5)
+    elif dtype == np.uint8:
+        if img.dtype == np.uint16:
+            img = np.uint8((img + 128) // 257)
+        elif img.dtype != np.uint8:
+            img = np.clip(img, 0, 1)
+            img = np.uint8(img * 255 + 0.5)
+    # return
+    return img
 
 # ======
 # base class

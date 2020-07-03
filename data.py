@@ -151,8 +151,14 @@ class DataBase:
             inputs.append(_input)
             labels.append(_label)
         # concat data to form a batch (NCHW)
-        inputs = np.concatenate(inputs, axis=0)
-        labels = np.concatenate(labels, axis=0)
+        if len(inputs[0].shape) < 4:
+            inputs = np.stack(inputs, axis=0)
+        else:
+            inputs = np.concatenate(inputs, axis=0)
+        if len(labels[0].shape) < 4:
+            labels = np.stack(labels, axis=0)
+        else:
+            labels = np.concatenate(labels, axis=0)
         # convert to float32
         inputs = convert_dtype(inputs, np.float32)
         labels = convert_dtype(labels, np.float32)

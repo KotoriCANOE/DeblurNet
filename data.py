@@ -52,6 +52,7 @@ class DataBase:
         self.config = config
         self.__dict__.update(config.__dict__)
         # initialize
+        self.val_set = None
         self.get_files()
 
     @staticmethod
@@ -117,10 +118,6 @@ class DataBase:
                 self.val_set = data_list[:self.val_size]
                 data_list = data_list[self.val_size:]
                 eprint('validation set: {}'.format(self.val_size))
-                # write val set to file
-                if self.config.__contains__('train_dir'):
-                    with open(os.path.join(self.config.train_dir, 'val_set.txt'), 'w') as fd:
-                        fd.writelines(['{}\n'.format(i) for i in self.val_set])
             # main set
             assert self.batch_size <= len(data_list)
             self.epoch_steps = len(data_list) // self.batch_size
@@ -130,6 +127,10 @@ class DataBase:
             else:
                 self.num_epochs = (self.max_steps + self.epoch_steps - 1) // self.epoch_steps
             self.main_set = data_list[:self.epoch_size]
+        # write val set to file
+        if self.val_set is not None and self.config.__contains__('train_dir'):
+            with open(os.path.join(self.config.train_dir, 'val_set.txt'), 'w') as fd:
+                fd.writelines(['{}\n'.format(i) for i in self.val_set])
         # print
         eprint('main set: {}\nepoch steps: {}\nnum epochs: {}\nmax steps: {}\n'
             .format(self.epoch_size, self.epoch_steps, self.num_epochs, self.max_steps))

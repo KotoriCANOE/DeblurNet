@@ -3,49 +3,80 @@ import random
 import numpy as np
 from scipy import ndimage
 from PIL import Image
-from time import time
+from io import BytesIO
+import webp
 import zimg
+from time import time
 from utils import eprint, reset_random, listdir_files, bool_argument
 
+def convert_dtype(img, dtype, dither=None, channel_first=False):
+    if dtype == img.dtype: # skip same type
+        return img
+    elif dtype == np.float32:
+        if img.dtype == np.uint8:
+            img = np.float32(img) * (1 / 255)
+        elif img.dtype == np.uint16:
+            img = np.float32(img) * (1 / 65535)
+        elif img.dtype != np.float32:
+            img = np.float32(img)
+    elif dtype == np.uint16:
+        if img.dtype == np.uint8:
+            img = np.uint16(img) * 255
+        elif img.dtype != np.uint16:
+            img = np.clip(img, 0, 1)
+            img = np.uint16(img * 65535 + 0.5)
+    elif dtype == np.uint8:
+        #if dither is not None and img.dtype != np.uint8:
+        #    print('Convert depth with dither={}'.format(dither))
+        #    img = zimg.convertFormat(img, channel_first=channel_first, depth=8, dither=dither)
+        #elif img.dtype == np.uint16:
+        if img.dtype == np.uint16:
+            img = np.uint8((img + 128) // 257)
+        elif img.dtype != np.uint8:
+            img = np.clip(img, 0, 1)
+            img = np.uint8(img * 255 + 0.5)
+    # return
+    return img
+
 def random_resize(src, dw, dh, roi_left=0, roi_top=0, roi_width=0, roi_height=0, channel_first=False):
-    rand0 = np.random.uniform(0, 1)
-    if rand0 < 0.02:
+    rand_val = np.random.randint(0, 100)
+    if rand_val < 2:
         dst = zimg.resize(src, dw, dh, 'Point', channel_first=channel_first,
             roi_left=roi_left, roi_top=roi_top, roi_width=roi_width, roi_height=roi_height)
-    elif rand0 < 0.04:
+    elif rand_val < 4:
         dst = zimg.resize(src, dw, dh, 'Bilinear', channel_first=channel_first,
             roi_left=roi_left, roi_top=roi_top, roi_width=roi_width, roi_height=roi_height)
-    elif rand0 < 0.06:
+    elif rand_val < 6:
         dst = zimg.resize(src, dw, dh, 'Spline16', channel_first=channel_first,
             roi_left=roi_left, roi_top=roi_top, roi_width=roi_width, roi_height=roi_height)
-    elif rand0 < 0.08:
+    elif rand_val < 8:
         dst = zimg.resize(src, dw, dh, 'Spline36', channel_first=channel_first,
             roi_left=roi_left, roi_top=roi_top, roi_width=roi_width, roi_height=roi_height)
-    elif rand0 < 0.10:
+    elif rand_val < 10:
         dst = zimg.resize(src, dw, dh, 'Spline64', channel_first=channel_first,
             roi_left=roi_left, roi_top=roi_top, roi_width=roi_width, roi_height=roi_height)
-    elif rand0 < 0.28: # Lanczos(taps=2~19)
+    elif rand_val < 28: # Lanczos(taps=2~19)
         taps = np.random.randint(2, 20)
         dst = zimg.resize(src, dw, dh, 'Lanczos', taps, channel_first=channel_first,
             roi_left=roi_left, roi_top=roi_top, roi_width=roi_width, roi_height=roi_height)
     else: # Bicubic
-        if rand0 < 0.46:
-            if rand0 < 0.30: # Hermite
+        if rand_val < 46:
+            if rand_val < 30: # Hermite
                 B = 0
                 C = 0
-            elif rand0 < 0.32: # B-Spline
+            elif rand_val < 32: # B-Spline
                 B = 1
                 C = 0
-            elif rand0 < 0.34: # Robidoux Soft
+            elif rand_val < 34: # Robidoux Soft
                 B = 0.67962275898295921 # (9-3*sqrt(2))/7
                 C = 0.1601886205085204 # 0.5 - B * 0.5
-            elif rand0 < 0.36: # Robidoux
+            elif rand_val < 36: # Robidoux
                 B = 0.37821575509399866 # 12/(19+9*sqrt(2)
                 C = 0.31089212245300067 # 113/(58+216*sqrt(2))
-            elif rand0 < 0.38: # Mitchell
+            elif rand_val < 38: # Mitchell
                 B = 1 / 3
                 C = 1 / 3
-            elif rand0 < 0.40: # Robidoux Sharp
+            elif rand_val < 40: # Robidoux Sharp
                 B = 0.2620145123990142 # 6/(13+7*sqrt(2))
                 C = 0.3689927438004929 # 7/(2+12*sqrt(2)
             else: # Catmull-Rom
@@ -55,21 +86,21 @@ def random_resize(src, dw, dh, roi_left=0, roi_top=0, roi_width=0, roi_height=0,
             if np.random.randint(0, 10) > 1:
                 B += np.random.normal(0, 0.05)
                 C += np.random.normal(0, 0.05)
-        elif rand0 < 0.80:
-            if rand0 < 0.66: # Keys Cubic
+        elif rand_val < 80:
+            if rand_val < 66: # Keys Cubic
                 B = np.random.uniform(0, 2 / 3) + np.random.normal(0, 1 / 3)
                 C = 0.5 - B * 0.5
-            elif rand0 < 0.74: # Soft Cubic
+            elif rand_val < 74: # Soft Cubic
                 B = np.random.uniform(0.5, 1) + np.random.normal(0, 0.25)
                 C = 1 - B
             else: # Sharp Cubic
                 B = np.random.uniform(-0.75, -0.25) + np.random.normal(0, 0.25)
                 C = B * -0.5
             # randomly alternate the kernel with 70%/90% probability
-            if np.random.randint(0, 10) > (2 if rand0 < 0.66 else 0):
+            if np.random.randint(0, 10) > (2 if rand_val < 66 else 0):
                 B += np.random.normal(0, 1 / 6)
                 C += np.random.normal(0, 1 / 6)
-        elif rand0 < 0.85:
+        elif rand_val < 85:
             B = np.random.uniform(-1.5, 1.5) # amount of haloing
             C = -1 # when c is around b * 0.8, aliasing is minimum
             if B >= 0: # with aliasing
@@ -101,17 +132,24 @@ def random_filter(src, dw=None, dh=None, channel_first=False):
         dh = sh
     scale = np.sqrt((dw * dh) / (sw * sh))
     # random number
-    rand_updown = np.random.randint(0, 5) # int ~ [0, 5)
-    min_scale = min(-2, np.log2(scale * 0.5))
-    max_scale = max(1, np.log2(scale * 2))
-    rand_scale = np.random.uniform(min_scale, 0) if rand_updown > 0 else np.random.uniform(0, max_scale)
+    rand_updown = np.random.randint(0, 10)
+    if rand_updown < 1: # no scale
+        rand_scale = 0
+    elif rand_updown < 3: # up scale
+        max_scale = max(1, np.log2(scale * 2))
+        rand_scale = np.random.uniform(0, max_scale)
+    else: # down scale
+        min_scale = min(-2, np.log2(scale * 0.5))
+        rand_scale = np.random.uniform(min_scale, 0)
     rand_scale = 2 ** rand_scale # [0.25, 1) + [1, 4)
     # random resize
-    tw = int(sw * rand_scale + 0.5)
-    th = int(sh * rand_scale + 0.5)
-    # print('{}x{} => {}x{} => {}x{}'.format(sw, sh, tw, th, dw, dh))
-    last = random_resize(last, tw, th, channel_first=channel_first)
-    last = random_resize(last, dw, dh, channel_first=channel_first)
+    if rand_scale != 1: # random scale
+        tw = int(sw * rand_scale + 0.5)
+        th = int(sh * rand_scale + 0.5)
+        # print('{}x{} => {}x{} => {}x{}'.format(sw, sh, tw, th, dw, dh))
+        last = random_resize(last, tw, th, channel_first=channel_first)
+    if rand_scale != 1 or dw != sw or dh != sh: # scale to target size
+        last = random_resize(last, dw, dh, channel_first=channel_first)
     # return
     return last
 
@@ -152,6 +190,8 @@ def random_noise(src, noise_str=0.03, noise_corr=0.75, matrix=None, channel_firs
         noiseY = noise_gen(shapeY, scaleY, corrY, channel_first=channel_first)
         noise = np.stack([noiseY] * 3, axis=0 if channel_first else -1)
         last = last + noise
+    else: # no noise
+        pass
     # return
     return last
 
@@ -161,9 +201,6 @@ def random_chroma(src, matrix=None, channel_first=False):
     sh = src.shape[-2 if channel_first else -3]
     if matrix is None:
         matrix = ['BT709', 'ST170_M', 'BT2020_NCL'][np.random.randint(0, 3)]
-    # 0: YUV420, MPEG-1 chroma placement
-    # 1: YUV420, MPEG-2 chroma placement
-    # 2~4: RGB
     filters = (
         [{'filter': 'Bicubic', 'filter_a': 0, 'filter_b': 0.5}] * 3 +
         [{'filter': 'Bicubic', 'filter_a': 1/3, 'filter_b': 1/3}] * 2 +
@@ -172,7 +209,10 @@ def random_chroma(src, matrix=None, channel_first=False):
         {'filter': 'Point'}, {'filter': 'Bilinear'},
         {'filter': 'Lanczos', 'filter_a': 3}]
     )
-    rand_yuv = np.random.randint(0, 5)
+    # 0: YUV420, MPEG-1 chroma placement
+    # 1: YUV420, MPEG-2 chroma placement
+    # 2~5: RGB
+    rand_yuv = np.random.randint(0, 6)
     # convert RGB to YUV420
     if rand_yuv < 2:
         last = zimg.convertFormat(last, channel_first=channel_first, matrix_in='rgb', matrix=matrix)
@@ -207,29 +247,49 @@ def linear_resize(src, dw, dh, channel_first=False):
     # return
     return last
 
-def convert_dtype(img, dtype):
-    if dtype == img.dtype:
-        pass
-    elif dtype == np.float32:
-        if img.dtype == np.uint8:
-            img = np.float32(img) * (1 / 255)
-        elif img.dtype == np.uint16:
-            img = np.float32(img) * (1 / 65535)
-        elif img.dtype != np.float32:
-            img = np.float32(img)
-    elif dtype == np.uint16:
-        if img.dtype == np.uint8:
-            img = np.uint16(img) * 255
-        elif img.dtype != np.uint16:
-            img = np.clip(img, 0, 1)
-            img = np.uint16(img * 65535 + 0.5)
-    elif dtype == np.uint8:
-        if img.dtype == np.uint16:
-            img = np.uint8(img // 257)
-        elif img.dtype != np.uint8:
-            img = np.clip(img, 0, 1)
-            img = np.uint8(img * 255 + 0.5)
-    return img
+def random_quantize(src, dtype=None, channel_first=False):
+    if dtype is None:
+        dtype = src.dtype
+    last = src
+    rand_val = np.random.randint(0, 4)
+    # if needed, convert to 8-bit with/without dithering
+    if dtype == np.uint8 or rand_val > 0: # 1, 2, 3
+        dither = ['none'] * 2 + ['ordered', 'random', 'error_diffusion']
+        dither = dither[np.random.randint(0, len(dither))]
+        last = convert_dtype(last, np.uint8, dither=dither, channel_first=channel_first)
+    # if needed, convert CHW to HWC
+    if rand_val > 1 and channel_first:
+        last = np.transpose(last, (1, 2, 0))
+    # randomly encode image
+    if rand_val == 2: # 2: WebP
+        preset = list(webp.WebPPreset)
+        preset = preset[np.random.randint(0, len(preset))]
+        quality = np.random.uniform(0, 10) ** 2 # [0, 100) with gamma correction (gamma=2)
+        # encode and decode
+        last = np.copy(last, order='C')
+        pic = webp.WebPPicture.from_numpy(last)
+        config = webp.WebPConfig.new(preset=preset, quality=quality, lossless=False)
+        data = pic.encode(config)
+        last = data.decode(color_mode=webp.WebPColorMode.RGB)
+    elif rand_val == 3: # 3: JPEG
+        subsampling = ['4:4:4'] * 3 + ['4:2:2', '4:2:0']
+        subsampling = subsampling[np.random.randint(0, len(subsampling))]
+        quality = np.random.randint(1, 101)
+        qtables = [None] * 2 + ['web_low', 'web_high']
+        qtables = qtables[np.random.randint(0, len(qtables))]
+        # encode and decode
+        with BytesIO() as buffer:
+            im = Image.fromarray(last)
+            im.save(buffer, 'JPEG', subsampling=subsampling, quality=quality, qtables=qtables)
+            im = Image.open(buffer)
+            last = np.array(im, copy=False)
+    # if needed, convert HWC to CHW
+    if rand_val > 1 and channel_first:
+        last = np.transpose(last, (2, 0, 1))
+    # type conversion
+    last = convert_dtype(last, dtype)
+    # return
+    return last
 
 def pre_process(config, img, dtype=np.float32):
     channel_first = True
@@ -287,7 +347,7 @@ def pre_process(config, img, dtype=np.float32):
         img = img[:, ::-1, ::-1]
     # convert to float32
     img2 = convert_dtype(img, np.float32)
-    # random filter for input
+    # random filter (input)
     rand_linear = np.random.randint(0, 2) # int ~ [0, 2)
     matrix = ['BT709', 'ST170_M', 'BT2020_NCL'][np.random.randint(0, 3)]
     _input = img2
@@ -300,16 +360,16 @@ def pre_process(config, img, dtype=np.float32):
     if rand_linear > 0: # convert back to gamma-corrected scale
         _input = zimg.convertFormat(_input, channel_first=channel_first, transfer_in='LINEAR', transfer=config.transfer)
     _input = random_chroma(_input, matrix=matrix, channel_first=channel_first)
-    # type conversion (input)
-    _input = convert_dtype(_input, dtype)
+    # random quantize and type conversion (input)
+    _input = random_quantize(_input, dtype, channel_first=channel_first)
     # pre downscale and type conversion (label)
     if pre_scale != 1:
         _label = linear_resize(img2, config.patch_width, config.patch_height, channel_first=channel_first)
-        _label = convert_dtype(_label, dtype)
+        _label = convert_dtype(_label, dtype, dither='error_diffusion', channel_first=channel_first)
     elif dtype == np.float32:
         _label = img2
     else:
-        _label = convert_dtype(img, dtype)
+        _label = convert_dtype(img, dtype, dither='error_diffusion', channel_first=channel_first)
     # return
     return _input, _label # CHW, dtype
 
@@ -322,10 +382,14 @@ class DataWriter:
         # create save directory
         if os.path.exists(config.save_dir):
             eprint('Confirm removing {}\n[Y/n]'.format(config.save_dir))
-            if input() == 'Y':
+            _input = input()
+            if _input == 'Y':
                 import shutil
                 shutil.rmtree(config.save_dir)
                 eprint('Removed: ' + config.save_dir)
+            elif _input != 'n':
+                import sys
+                sys.exit()
         if not os.path.exists(config.save_dir):
             os.makedirs(config.save_dir)
         # set deterministic random seed

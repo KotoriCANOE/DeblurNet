@@ -419,6 +419,55 @@ grad clip: -0.1
 
 ---
 
+## 120
+
+steps: 255000
+cosine restarts (warmup cycle=5)
+dataset: Pixiv bookmark (epoch=1)
+size: 8x3x256x256
+new pre-processing
+
+## 121
+
+steps: 511000
+cosine restarts (warmup cycle=6)
+dataset: Pixiv bookmark (epoch=1)
+
+## 122
+
+steps: 511000
+dataset: Pixiv bookmark (epoch=1)
+improved pre-processing
+use packed data but forgot to set batch size so val size is unexpected
+val size: 256 => 64
+
+## 123
+
+steps: 511000
+dataset: Pixiv bookmark (epoch=2)
+
+## 124
+
+steps: 511000
+dataset: Pixiv bookmark (epoch=2)
+random seed: 0 => None
+
+## 125
+
+steps: 511000
+dataset: Pixiv bookmark (epoch=2)
+random shuffle before selecting val set
+
+## 126
+
+steps: 511000
+dataset: Pixiv bookmark + COCO (epoch=4)
+size: 32x3x128x128
+val size: 64 => 256
+random seed: 0
+
+---
+
 ## 200
 
 SR

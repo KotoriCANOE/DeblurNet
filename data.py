@@ -78,6 +78,8 @@ class DataBase:
 
     def get_files_packed(self):
         data_list = listdir_files(self.dataset, recursive=True, filter_ext=['.npz'])
+        if self.shuffle:
+            random.shuffle(data_list)
         # val set
         if self.val_dir is not None:
             val_set = listdir_files(self.val_dir, recursive=True, filter_ext=['.npz'])

@@ -10,31 +10,31 @@ from time import time
 from utils import eprint, reset_random, listdir_files, bool_argument
 
 def convert_dtype(img, dtype, dither=None, channel_first=False):
-    if dtype == img.dtype: # skip same type
+    src_dtype = img.dtype
+    if dtype == src_dtype: # skip same type
         return img
-    elif dtype == np.float32:
-        if img.dtype == np.uint8:
-            img = np.float32(img) * (1 / 255)
-        elif img.dtype == np.uint16:
-            img = np.float32(img) * (1 / 65535)
-        elif img.dtype != np.float32:
-            img = np.float32(img)
     elif dtype == np.uint16:
-        if img.dtype == np.uint8:
+        if src_dtype == np.uint8:
             img = np.uint16(img) * 255
-        elif img.dtype != np.uint16:
+        elif src_dtype != np.uint16:
             img = np.clip(img, 0, 1)
             img = np.uint16(img * 65535 + 0.5)
     elif dtype == np.uint8:
-        #if dither is not None and img.dtype != np.uint8:
+        #if dither is not None and src_dtype != np.uint8:
         #    print('Convert depth with dither={}'.format(dither))
         #    img = zimg.convertFormat(img, channel_first=channel_first, depth=8, dither=dither)
-        #elif img.dtype == np.uint16:
-        if img.dtype == np.uint16:
+        #elif src_dtype == np.uint16:
+        if src_dtype == np.uint16:
             img = np.uint8((img + 128) // 257)
-        elif img.dtype != np.uint8:
+        elif src_dtype != np.uint8:
             img = np.clip(img, 0, 1)
             img = np.uint8(img * 255 + 0.5)
+    else: # assume float
+        img = img.astype(dtype)
+        if src_dtype == np.uint8:
+            img *= (1 / 255)
+        elif src_dtype == np.uint16:
+            img *= (1 / 65535)
     # return
     return img
 
@@ -373,6 +373,21 @@ def pre_process(config, img, dtype=np.float32):
     # return
     return _input, _label # CHW, dtype
 
+def mixup(config, img1, img2, alpha=1.2, dtype=np.float32):
+    # process and mixup in float32
+    # TODO: linear light?
+    inter_dtype = dtype if dtype in [np.float16, np.float32, np.float64] else np.float32
+    _input1, _label1 = pre_process(config, img1, inter_dtype)
+    _input2, _label2 = pre_process(config, img2, inter_dtype)
+    _lambda = np.random.beta(alpha, alpha)
+    _input = _lambda * _input1 + (1 - _lambda) * _input2
+    _label = _lambda * _label1 + (1 - _lambda) * _label2
+    # convert to output dtype
+    _input = convert_dtype(_input, dtype)
+    _label = convert_dtype(_label, dtype)
+    # return
+    return _input, _label # CHW, dtype
+
 class DataWriter:
     def __init__(self, config):
         self.config = config
@@ -425,15 +440,42 @@ class DataWriter:
         labels = np.stack(labels, axis=0)
         np.savez_compressed(ofile, inputs=inputs, labels=labels)
 
+    @staticmethod
+    def process_mixup(config, ifiles, ifiles2, ofile):
+        dtype = np.dtype(config.dtype)
+        inputs = []
+        labels = []
+        for ifile, ifile2 in zip(ifiles, ifiles2):
+            try:
+                im = Image.open(ifile)
+                img = np.array(im, copy=False)
+                im2 = Image.open(ifile2)
+                img2 = np.array(im2, copy=False)
+                _input, _label = mixup(config, img, img2, dtype=dtype)
+                inputs.append(_input)
+                labels.append(_label)
+            except Exception as err:
+                print('======\nError when processing {}\n{}\n------'.format(ifile, err))
+                # fill zero for data with error
+                _blank = np.zeros((3, config.patch_height, config.patch_width), dtype)
+                inputs.append(_blank)
+                labels.append(_blank)
+        # CHW => NCHW
+        inputs = np.stack(inputs, axis=0)
+        labels = np.stack(labels, axis=0)
+        np.savez_compressed(ofile, inputs=inputs, labels=labels)
+
     @classmethod
     def run(cls, config, dataset):
         _dataset = dataset.copy()
+        _dataset2 = dataset.copy()
         epochs = config.epochs
         epoch_steps = len(_dataset) // config.batch_size
         step_width = len(str(epoch_steps))
         # pre-shuffle the dataset
         if config.shuffle == 1:
             random.shuffle(_dataset)
+            random.shuffle(_dataset2)
         # execute pre-process
         from concurrent.futures import ProcessPoolExecutor
         with ProcessPoolExecutor(config.processes) as executor:
@@ -447,19 +489,24 @@ class DataWriter:
                 # randomly shuffle for each epoch
                 if config.shuffle == 2:
                     random.shuffle(_dataset)
+                    random.shuffle(_dataset2)
                 # loop over the batches and append the calls
                 futures = []
                 for step in range(epoch_steps):
-                    begin = step * config.batch_size
-                    end = begin + config.batch_size
-                    ifiles = _dataset[begin : end]
                     ofile = os.path.join(odir, '{:0>{width}}.npz'.format(step, width=step_width))
                     # skip existing files
                     if not os.path.exists(ofile):
                         if skipped > 0:
                             print('Skipped {} existed output files'.format(skipped))
                             skipped = 0
-                        futures.append(executor.submit(cls.process, config, ifiles, ofile))
+                        begin = step * config.batch_size
+                        end = begin + config.batch_size
+                        ifiles = _dataset[begin : end]
+                        if config.mixup:
+                            ifiles2 = _dataset2[begin : end]
+                            futures.append(executor.submit(cls.process_mixup, config, ifiles, ifiles2, ofile))
+                        else:
+                            futures.append(executor.submit(cls.process, config, ifiles, ofile))
                     else:
                         skipped += 1
                 # execute the calls
@@ -491,7 +538,8 @@ def main(argv):
     argp.add_argument('--shuffle', type=int, default=2) # 0: no shuffle, 1: shuffle once, 2: shuffle every epoch
     argp.add_argument('--log-freq', type=int, default=1000)
     argp.add_argument('--processes', type=int, default=8)
-    argp.add_argument('--dtype', default='uint8')
+    argp.add_argument('--dtype', default='float16')
+    argp.add_argument('--mixup', type=bool, default=1)
     argp.add_argument('--pre-down', type=bool, default=1)
     argp.add_argument('--scale', type=int, default=1)
     argp.add_argument('--patch-width', type=int, default=256)

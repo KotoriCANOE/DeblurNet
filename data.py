@@ -5,27 +5,27 @@ import random
 from utils import bool_argument, eprint, listdir_files
 
 def convert_dtype(img, dtype):
-    if dtype == img.dtype: # skip same type
+    src_dtype = img.dtype
+    if dtype == src_dtype: # skip same type
         return img
-    elif dtype == np.float32:
-        if img.dtype == np.uint8:
-            img = np.float32(img) * (1 / 255)
-        elif img.dtype == np.uint16:
-            img = np.float32(img) * (1 / 65535)
-        elif img.dtype != np.float32:
-            img = np.float32(img)
     elif dtype == np.uint16:
-        if img.dtype == np.uint8:
+        if src_dtype == np.uint8:
             img = np.uint16(img) * 255
-        elif img.dtype != np.uint16:
+        elif src_dtype != np.uint16:
             img = np.clip(img, 0, 1)
             img = np.uint16(img * 65535 + 0.5)
     elif dtype == np.uint8:
-        if img.dtype == np.uint16:
+        if src_dtype == np.uint16:
             img = np.uint8((img + 128) // 257)
-        elif img.dtype != np.uint8:
+        elif src_dtype != np.uint8:
             img = np.clip(img, 0, 1)
             img = np.uint8(img * 255 + 0.5)
+    else: # assume float
+        img = img.astype(dtype)
+        if src_dtype == np.uint8:
+            img *= (1 / 255)
+        elif src_dtype == np.uint16:
+            img *= (1 / 65535)
     # return
     return img
 

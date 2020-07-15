@@ -93,6 +93,120 @@ def RGB2Y(last, data_format=None, scope=None):
 
 ################################################################
 
+TRANSFER_TABLE = {
+    'BT709': 1, # high precision
+    'UNSPECIFIED': 2,
+    'BT470_M': 4,
+    'BT470_BG': 5,
+    'BT601': 6, # high precision
+    'ST170_M': 6,
+    'ST240_M': 7,
+    'LINEAR': 8,
+    'LOG_100': 9,
+    'LOG_316': 10,
+    'IEC_61966_2_4': 11,
+    'BT1361': 12,
+    'IEC_61966_2_1': 13, # IEC-61966-2-1 standard of sRGB
+    'SRGB': 113, # accurate sRGB with curve continuity and slope continuity
+    'BT2020_10': 14, # high precision
+    'BT2020_12': 15, # high precision
+    'ST2084': 16,
+    'ST428': 17,
+    'ARIB_B67': 18
+}
+
+def TransferConvert(l2g, last, transfer=None, gamma=1.0, epsilon=1e-8, scope=None, scope_default='TransferConvert'):
+    # transfer characteristics
+    if isinstance(transfer, str):
+        transfer = TRANSFER_TABLE[transfer.upper()]
+    if transfer is None or transfer in [2, 8]:
+        formula = 0
+    elif transfer == 4:
+        formula = 0
+        gamma *= 2.2
+    elif transfer == 5:
+        formula = 0
+        gamma *= 2.8
+    elif transfer in [1, 6, 14, 15]:
+        formula = 1
+        power = 0.45
+        power_rec = 1 / power
+        slope = 4.500
+        alpha = 1.099296826809442
+        beta = 0.018053968510807
+        k0 = beta * slope
+    elif transfer == 7:
+        formula = 1
+        power = 0.45
+        power_rec = 1 / power
+        slope = 4.0
+        alpha = 1.1115
+        k0 = 0.0912
+        beta = k0 / slope
+    elif transfer == 13:
+        formula = 1
+        power = 1 / 2.4
+        power_rec = 2.4 # 12 / 5
+        slope = 12.92 # 323 / 25
+        alpha = 1.055 # 211 / 200
+        k0 = 0.04045
+        beta = k0 / slope
+    elif transfer == 113:
+        formula = 1
+        power = 1 / 2.4
+        power_rec = 2.4
+        slope = 12.9232102
+        alpha = 1.055
+        k0 = 11 / 280
+        beta = k0 / slope
+    elif transfer == 9:
+        formula = 2
+        alpha = 1 / 2
+        beta = 0.01
+    elif transfer == 10:
+        formula = 2
+        alpha = 2 / 5
+        beta = np.sqrt(10) / 1000
+    else:
+        raise ValueError('transfer={} currently not supported'.format(transfer))
+    with tf.variable_scope(scope, scope_default):
+        # clipping
+        if gamma != 1.0 or formula in [1, 2]:
+            last = tf.clip_by_value(last, 0, 1)
+        # apply transfer
+        if formula == 0:
+            pass
+        elif formula == 1:
+            if l2g:
+                last = tf.where_v2(last < beta, slope * last,
+                    alpha * (last + epsilon) ** power - (alpha - 1))
+            else:
+                last = tf.where_v2(last < k0, (1 / slope) * last,
+                    ((1 / alpha) * (last + (alpha - 1))) ** power_rec)
+        elif formula == 2:
+            if l2g:
+                last = tf.math.maximum(0.0, 1.0 + (alpha / np.log(10)) * tf.math.log(last + epsilon))
+            else:
+                last = tf.math.pow(10.0, (1 / alpha) * (last - 1.0))
+        # pure gamma adjustment
+        if gamma == 2.0:
+            last = tf.math.sqrt(last + epsilon) if l2g else tf.math.square(last)
+        elif gamma == 0.5:
+            last = tf.math.square(last) if l2g else tf.math.sqrt(last + epsilon)
+        elif gamma > 1.0:
+            last = (last + epsilon) ** (1 / gamma) if l2g else last ** gamma
+        elif gamma < 1.0:
+            last = last ** (1 / gamma) if l2g else (last + epsilon) ** gamma
+    return last
+
+def Linear2Gamma(last, transfer=None, gamma=1.0, epsilon=1e-8, scope=None):
+    return TransferConvert(True, last, transfer, gamma, epsilon, scope, 'Linear2Gamma')
+
+def Gamma2Linear(last, transfer=None, gamma=1.0, epsilon=1e-8, scope=None):
+    return TransferConvert(False, last, transfer, gamma, epsilon, scope, 'Gamma2Linear')
+
+################################################################
+
 # Gaussian filter window for Conv2D
 def GaussWindow(radius, sigma, channels=1, one_dim=False, dtype=tf.float32):
     if one_dim:

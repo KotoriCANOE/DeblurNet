@@ -4,14 +4,22 @@ import os
 from utils import bool_argument, eprint, listdir_files, reset_random, create_session, BatchPNG
 from data import DataImage as Data
 from model import Model
+import layers
 
 # losses measured for testing
-def test_losses(ref, pred):
-    # RGB color space
-    RGB_mse = tf.losses.mean_squared_error(ref, pred, weights=1.0)
-    RGB_mad = tf.losses.absolute_difference(ref, pred, weights=1.0)
+def test_losses(ref, pred, epsilon=1e-8):
+    # sRGB color space
+    sRGB_MSE = tf.losses.mean_squared_error(ref, pred, weights=1.0)
+    sRGB_PSNR = (10 / np.log(10)) * tf.math.log(1 / (sRGB_MSE + epsilon))
+    sRGB_MAD = tf.losses.absolute_difference(ref, pred, weights=1.0)
+    # linear RGB color space
+    ref = layers.Gamma2Linear(ref, 'SRGB')
+    pred = layers.Gamma2Linear(pred, 'SRGB')
+    RGB_MSE = tf.losses.mean_squared_error(ref, pred, weights=1.0)
+    RGB_PSNR = (10 / np.log(10)) * tf.math.log(1 / (RGB_MSE + epsilon))
+    RGB_MAD = tf.losses.absolute_difference(ref, pred, weights=1.0)
     # return each loss
-    return RGB_mse, RGB_mad
+    return sRGB_PSNR, sRGB_MAD, RGB_PSNR, RGB_MAD
 
 # class for testing session
 class Test:
@@ -114,9 +122,7 @@ class Test:
         if self.log_file:
             from datetime import datetime
             losses_mean = [l / self.epoch_steps for l in losses_sum]
-            psnr = 10 * np.log10(1 / losses_mean[0]) if losses_mean[0] > 0 else 100
-            test_log = 'PSNR (RGB):{}, MAD (RGB): {}'\
-                .format(psnr, *losses_mean[1:])
+            test_log = 'PSNR (sRGB):{}, MAD (sRGB): {}, PSNR (RGB):{}, MAD (RGB): {}'.format(*losses_mean)
             with open(self.log_file, 'a', encoding='utf-8') as fd:
                 fd.write('Testing No.{}\n'.format(self.postfix))
                 fd.write(self.test_dir + '\n')
@@ -153,14 +159,14 @@ class Test:
             ckpt_num = re.findall(prefix + r'(\d+)', ckpt)[0]
             stats.append(np.array([float(ckpt_num)] + losses_mean))
         # save stats
-        import matplotlib.pyplot as plt
         stats = np.stack(stats)
         np.save(os.path.join(self.test_dir, 'stats.npy'), stats)
         # save plot
+        import matplotlib.pyplot as plt
         fig, ax = plt.subplots()
         ax.set_title('Test Error with Training Progress')
         ax.set_xlabel('training steps')
-        ax.set_ylabel('MAD (RGB)')
+        ax.set_ylabel('MAD (sRGB)')
         ax.set_xscale('linear')
         ax.set_yscale('log')
         stats = stats[1:]

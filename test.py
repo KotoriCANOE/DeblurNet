@@ -183,7 +183,7 @@ class Test:
             self.build_saver()
             with create_session() as sess:
                 self.run_last(sess)
-                # self.run_steps(sess)
+                self.run_steps(sess)
 
 def main(argv=None):
     # arguments parsing

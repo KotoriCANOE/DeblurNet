@@ -2,9 +2,10 @@ import tensorflow.compat.v1 as tf
 import numpy as np
 
 def bool_argument(argp, name, default):
-    argp.add_argument('--' + name, dest=name, action='store_true')
-    argp.add_argument('--no-' + name, dest=name, action='store_false')
-    eval('argp.set_defaults({}={})'.format(name, 'True' if default else 'False'))
+    dest = name.replace('-', '_')
+    argp.add_argument('--' + name, dest=dest, action='store_true')
+    argp.add_argument('--no-' + name, dest=dest, action='store_false')
+    eval('argp.set_defaults({}={})'.format(dest, 'True' if default else 'False'))
 
 # stderr print
 def eprint(*args, **kwargs):

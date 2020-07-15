@@ -13,8 +13,8 @@ def test_losses(ref, pred, epsilon=1e-8):
     sRGB_PSNR = (10 / np.log(10)) * tf.math.log(1 / (sRGB_MSE + epsilon))
     sRGB_MAD = tf.losses.absolute_difference(ref, pred, weights=1.0)
     # linear RGB color space
-    ref = layers.Gamma2Linear(ref, 'SRGB')
-    pred = layers.Gamma2Linear(pred, 'SRGB')
+    ref = layers.Gamma2Linear(ref, 'BT709')
+    pred = layers.Gamma2Linear(pred, 'BT709')
     RGB_MSE = tf.losses.mean_squared_error(ref, pred, weights=1.0)
     RGB_PSNR = (10 / np.log(10)) * tf.math.log(1 / (RGB_MSE + epsilon))
     RGB_MAD = tf.losses.absolute_difference(ref, pred, weights=1.0)

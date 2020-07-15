@@ -9,7 +9,7 @@ import zimg
 from time import time
 from utils import eprint, reset_random, listdir_files, bool_argument
 
-def convert_dtype(img, dtype, dither=None, channel_first=False):
+def convert_dtype(img, dtype):
     src_dtype = img.dtype
     if dtype == src_dtype: # skip same type
         return img
@@ -20,10 +20,6 @@ def convert_dtype(img, dtype, dither=None, channel_first=False):
             img = np.clip(img, 0, 1)
             img = np.uint16(img * 65535 + 0.5)
     elif dtype == np.uint8:
-        #if dither is not None and src_dtype != np.uint8:
-        #    print('Convert depth with dither={}'.format(dither))
-        #    img = zimg.convertFormat(img, channel_first=channel_first, depth=8, dither=dither)
-        #elif src_dtype == np.uint16:
         if src_dtype == np.uint16:
             img = np.uint8((img + 128) // 257)
         elif src_dtype != np.uint8:
@@ -236,14 +232,16 @@ def random_chroma(src, matrix=None, channel_first=False):
     # return
     return last
 
-def linear_resize(src, dw, dh, channel_first=False):
+def linear_resize(src, dw, dh, transfer, channel_first=False):
     last = src
     # convert to linear scale
-    last = zimg.convertFormat(last, channel_first=channel_first, transfer_in='bt709', transfer='linear')
+    if transfer.upper() == 'LINEAR':
+        last = zimg.convertFormat(last, channel_first=channel_first, transfer_in=transfer, transfer='LINEAR')
     # resize
     last = zimg.resize(last, dw, dh, 'Bicubic', 0, 0.5, channel_first=channel_first)
     # convert back to gamma-corrected scale
-    last = zimg.convertFormat(last, channel_first=channel_first, transfer_in='linear', transfer='bt709')
+    if transfer.upper() == 'LINEAR':
+        last = zimg.convertFormat(last, channel_first=channel_first, transfer_in='LINEAR', transfer=transfer)
     # return
     return last
 
@@ -252,11 +250,9 @@ def random_quantize(src, dtype=None, channel_first=False):
         dtype = src.dtype
     last = src
     rand_val = np.random.randint(0, 4)
-    # if needed, convert to 8-bit with/without dithering
+    # if needed, convert to 8-bit
     if dtype == np.uint8 or rand_val > 0: # 1, 2, 3
-        dither = ['none'] * 2 + ['ordered', 'random', 'error_diffusion']
-        dither = dither[np.random.randint(0, len(dither))]
-        last = convert_dtype(last, np.uint8, dither=dither, channel_first=channel_first)
+        last = convert_dtype(last, np.uint8)
     # if needed, convert CHW to HWC
     if rand_val > 1 and channel_first:
         last = np.transpose(last, (1, 2, 0))
@@ -348,28 +344,35 @@ def pre_process(config, img, dtype=np.float32):
     # convert to float32
     img2 = convert_dtype(img, np.float32)
     # random filter (input)
-    rand_linear = np.random.randint(0, 2) # int ~ [0, 2)
-    matrix = ['BT709', 'ST170_M', 'BT2020_NCL'][np.random.randint(0, 3)]
+    transfer = [None, None, 'BT2020_12', 'IEC_61966_2_1']
+    transfer = transfer[np.random.randint(0, len(transfer))]
+    matrix = ['BT709'] * 3 + ['ST170_M', 'BT2020_NCL']
+    matrix = matrix[np.random.randint(0, len(matrix))]
     _input = img2
-    if rand_linear > 0: # randomly convert to linear scale
-        _input = zimg.convertFormat(_input, channel_first=channel_first, transfer_in=config.transfer, transfer='LINEAR')
+    if transfer is not None: # randomly convert to linear scale
+        _input = zimg.convertFormat(_input, channel_first=channel_first, transfer_in=transfer, transfer='LINEAR')
     _input = random_filter(_input, config.patch_width // config.scale, config.patch_height // config.scale,
         channel_first=channel_first) # random filtering with resizer
     if config.noise_str > 0: # random noise
         _input = random_noise(_input, config.noise_str, config.noise_corr, matrix=matrix, channel_first=channel_first)
-    if rand_linear > 0: # convert back to gamma-corrected scale
-        _input = zimg.convertFormat(_input, channel_first=channel_first, transfer_in='LINEAR', transfer=config.transfer)
+    if transfer is not None: # convert back to gamma-corrected scale
+        _input = zimg.convertFormat(_input, channel_first=channel_first, transfer_in='LINEAR', transfer=transfer)
     _input = random_chroma(_input, matrix=matrix, channel_first=channel_first)
-    # random quantize and type conversion (input)
-    _input = random_quantize(_input, dtype, channel_first=channel_first)
-    # pre downscale and type conversion (label)
-    if pre_scale != 1:
-        _label = linear_resize(img2, config.patch_width, config.patch_height, channel_first=channel_first)
-        _label = convert_dtype(_label, dtype, dither='error_diffusion', channel_first=channel_first)
-    elif dtype == np.float32:
-        _label = img2
+    # random quantize, gamma2linear, type conversion (input)
+    if config.linear:
+        _input = random_quantize(_input, np.float32, channel_first=channel_first)
+        _input = zimg.convertFormat(_input, channel_first=channel_first, transfer_in=config.transfer, transfer='LINEAR')
+        _input = convert_dtype(_input, dtype)
     else:
-        _label = convert_dtype(img, dtype, dither='error_diffusion', channel_first=channel_first)
+        _input = random_quantize(_input, dtype, channel_first=channel_first)
+    # pre downscale and type conversion (label)
+    _label = img2
+    if config.linear:
+        _label = zimg.convertFormat(_label, channel_first=channel_first, transfer_in=config.transfer, transfer='LINEAR')
+    if pre_scale != 1:
+        _label = linear_resize(_label, config.patch_width, config.patch_height,
+            'LINEAR' if config.linear else config.transfer, channel_first=channel_first)
+    _label = convert_dtype(_label, dtype)
     # return
     return _input, _label # CHW, dtype
 
@@ -539,8 +542,9 @@ def main(argv):
     argp.add_argument('--log-freq', type=int, default=1000)
     argp.add_argument('--processes', type=int, default=8)
     argp.add_argument('--dtype', default='float16')
-    argp.add_argument('--mixup', type=bool, default=1)
-    argp.add_argument('--pre-down', type=bool, default=1)
+    bool_argument(argp, 'pre-down', True)
+    bool_argument(argp, 'linear', False)
+    bool_argument(argp, 'mixup', False)
     argp.add_argument('--scale', type=int, default=1)
     argp.add_argument('--patch-width', type=int, default=256)
     argp.add_argument('--patch-height', type=int, default=256)

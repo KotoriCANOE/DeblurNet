@@ -12,6 +12,7 @@ class Model:
         self.data_format = DATA_FORMAT
         self.input_range = 2 # internal range of input. 1: [0,1], 2: [-1,1]
         self.output_range = 2 # internal range of output. 1: [0,1], 2: [-1,1]
+        self.transfer = 'BT709'
         self.in_channels = 3
         self.out_channels = 3
         # train parameters
@@ -36,6 +37,7 @@ class Model:
         argp.add_argument('--data-format', default='NCHW')
         argp.add_argument('--input-range', type=int, default=2)
         argp.add_argument('--output-range', type=int, default=2)
+        argp.add_argument('--transfer', default='BT709')
         # training parameters
         argp.add_argument('--learning-rate', type=float, default=1e-3)
         argp.add_argument('--weight-decay', type=float, default=5e-5)
@@ -49,16 +51,23 @@ class Model:
         else:
             self.inputs = tf.identity(inputs, name='Input')
             self.inputs.set_shape(self.input_shape)
+        inputs = self.inputs
+        # convert to linear
+        inputs = layers.Gamma2Linear(inputs, self.transfer)
         if self.input_range == 2:
-            self.inputs = self.inputs * 2 - 1
+            inputs = inputs * 2 - 1
         # forward pass
         self.generator = Generator('Generator', self.config)
-        self.outputs = self.generator(self.inputs, reuse=None)
+        outputs = self.generator(inputs, reuse=None)
         # outputs
         if self.output_range == 2:
-            self.outputs = tf.multiply(self.outputs + 1, 0.5, name='Output')
-        else:
-            self.outputs = tf.identity(self.outputs, name='Output')
+            outputs = tf.tanh(outputs)
+            outputs = tf.multiply(outputs + 1, 0.5)
+        # convert to gamma
+        self.outputs = layers.Linear2Gamma(outputs, self.transfer)
+        self.outputs = tf.identity(self.outputs, name='Output')
+        self.outputs_gamma = (self.outputs if self.transfer.upper() == 'BT709'
+            else layers.Linear2Gamma(outputs, 'BT709'))
         # all the saver variables
         self.svars = self.generator.svars
         # all the restore variables
@@ -73,10 +82,14 @@ class Model:
         else:
             self.labels = tf.identity(labels, name='Label')
             self.labels.set_shape(self.output_shape)
+        # convert to gamma if it's linear
+        if self.transfer.upper() != 'BT709':
+            labels = layers.Gamma2Linear(self.labels, self.transfer)
+            self.labels_gamma = layers.Linear2Gamma(labels, 'BT709')
         # build model
         self.build_model(inputs)
         # build losses
-        self.build_g_loss(self.labels, self.outputs)
+        self.build_g_loss(self.labels_gamma, self.outputs_gamma)
 
     def build_g_loss(self, labels, outputs):
         self.g_log_losses = []

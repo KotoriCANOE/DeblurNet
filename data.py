@@ -48,6 +48,7 @@ class DataBase:
         self.prefetch = None
         self.buffer_size = None
         self.shuffle = None
+        self.mixup = None
         # copy all the properties from config object
         self.config = config
         self.__dict__.update(config.__dict__)
@@ -66,6 +67,7 @@ class DataBase:
         argp.add_argument('--prefetch', type=int, default=64)
         argp.add_argument('--buffer-size', type=int, default=256)
         bool_argument(argp, 'shuffle', True)
+        bool_argument(argp, 'mixup', True)
 
     @staticmethod
     def parse_arguments(args):
@@ -75,6 +77,9 @@ class DataBase:
         def argchoose(name, cond, tv, fv):
             argdefault(name, tv if cond else fv)
         argchoose('batch_size', args.test, 1, 32)
+        # force packed data loader if enable mixup
+        if args.mixup:
+            args.packed = True
 
     def get_files_packed(self):
         data_list = listdir_files(self.dataset, recursive=True, filter_ext=['.npz'])
@@ -180,9 +185,32 @@ class DataBase:
         # return
         return inputs, labels
 
+    @classmethod
+    def extract_batch_mixup(cls, batch_set, batch_set2):
+        # load the batch
+        with np.load(batch_set) as npz:
+            inputs = npz['inputs']
+            labels = npz['labels']
+        with np.load(batch_set2) as npz:
+            inputs2 = npz['inputs']
+            labels2 = npz['labels']
+        # convert to float32
+        inputs = convert_dtype(inputs, np.float32)
+        labels = convert_dtype(labels, np.float32)
+        inputs2 = convert_dtype(inputs2, np.float32)
+        labels2 = convert_dtype(labels2, np.float32)
+        # mixup
+        alpha = 1.2
+        _lambda = np.random.beta(alpha, alpha)
+        inputs = _lambda * inputs + (1 - _lambda) * inputs2
+        labels = _lambda * labels + (1 - _lambda) * labels2
+        # return
+        return inputs, labels
+
     def _gen_batches_packed(self, dataset, epoch_steps, num_epochs=1, start=0,
         shuffle=False):
         _dataset = dataset.copy()
+        _dataset2 = dataset.copy() # mixup dataset
         max_steps = epoch_steps * num_epochs
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(self.threads) as executor:
@@ -195,11 +223,16 @@ class DataBase:
                 # random shuffle
                 if shuffle:
                     random.shuffle(_dataset)
+                if self.mixup: # force shuffle for mixup dataset
+                    random.shuffle(_dataset2)
                 # loop over steps within an epoch
                 for step in range(step_start, step_stop):
                     batch_set = _dataset[step]
-                    futures.append(executor.submit(self.extract_batch_packed,
-                        batch_set))
+                    if self.mixup:
+                        batch_set2 = _dataset2[step]
+                        futures.append(executor.submit(self.extract_batch_mixup, batch_set, batch_set2))
+                    else:
+                        futures.append(executor.submit(self.extract_batch_packed, batch_set))
                     # yield the data beyond prefetch range
                     while len(futures) >= self.prefetch:
                         yield futures.pop(0).result()

@@ -7,19 +7,25 @@ from model import Model
 import layers
 
 # losses measured for testing
-def test_losses(ref, pred, epsilon=1e-8):
+def test_losses(ref, pred, data_format, epsilon=1e-8):
     # sRGB color space
     sRGB_MSE = tf.losses.mean_squared_error(ref, pred, weights=1.0)
     sRGB_PSNR = (10 / np.log(10)) * tf.math.log(1 / (sRGB_MSE + epsilon))
     sRGB_MAD = tf.losses.absolute_difference(ref, pred, weights=1.0)
+    refY = layers.RGB2Y(ref, data_format)
+    predY = layers.RGB2Y(pred, data_format)
+    sRGB_SSIM = layers.MS_SSIM(refY, predY, L=1, data_format=data_format)
     # linear RGB color space
     ref = layers.Gamma2Linear(ref, 'BT709')
     pred = layers.Gamma2Linear(pred, 'BT709')
     RGB_MSE = tf.losses.mean_squared_error(ref, pred, weights=1.0)
     RGB_PSNR = (10 / np.log(10)) * tf.math.log(1 / (RGB_MSE + epsilon))
     RGB_MAD = tf.losses.absolute_difference(ref, pred, weights=1.0)
+    refY = layers.RGB2Y(ref, data_format)
+    predY = layers.RGB2Y(pred, data_format)
+    RGB_SSIM = layers.MS_SSIM(refY, predY, L=1, data_format=data_format)
     # return each loss
-    return sRGB_PSNR, sRGB_MAD, RGB_PSNR, RGB_MAD
+    return sRGB_PSNR, sRGB_MAD, sRGB_SSIM, RGB_PSNR, RGB_MAD, RGB_SSIM
 
 # class for testing session
 class Test:
@@ -73,7 +79,7 @@ class Test:
             labels = tf.placeholder(tf.float32, name='labels')
             self.model = Model(self.config)
             outputs = self.model.build_model(inputs)
-            self.losses = list(test_losses(labels, outputs))
+            self.losses = list(test_losses(labels, outputs, self.config.data_format))
         # post-processing for output
         with tf.device('/cpu:0'):
             # convert to NHWC format
@@ -122,7 +128,8 @@ class Test:
         if self.log_file:
             from datetime import datetime
             losses_mean = [l / self.epoch_steps for l in losses_sum]
-            test_log = 'PSNR (sRGB):{}, MAD (sRGB): {}, PSNR (RGB):{}, MAD (RGB): {}'.format(*losses_mean)
+            test_log = ('PSNR (sRGB):{}, MAD (sRGB): {}, MS-SSIM (sRGB)' +
+                'PSNR (RGB):{}, MAD (RGB): {}, MS-SSIM (RGB)').format(*losses_mean)
             with open(self.log_file, 'a', encoding='utf-8') as fd:
                 fd.write('Testing No.{}\n'.format(self.postfix))
                 fd.write(self.test_dir + '\n')

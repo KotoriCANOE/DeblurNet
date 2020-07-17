@@ -331,15 +331,15 @@ def pre_process(config, img, dtype=np.float32):
         height = max(height, cropped_height)
         width = max(width, cropped_width)
     # random transpose with 50% probability
-    if np.random.randint(0, 2) > 0:
+    if config.augment and np.random.randint(0, 2) > 0:
         img = np.transpose(img, (0, 2, 1))
     # random flipping with 25% probability each
-    rand_val = np.random.randint(0, 4)
+    rand_val = np.random.randint(0, 4) if config.augment else 0
     if rand_val == 1:
         img = img[:, :, ::-1]
-    if rand_val == 2:
+    elif rand_val == 2:
         img = img[:, ::-1, :]
-    if rand_val == 3:
+    elif rand_val == 3:
         img = img[:, ::-1, ::-1]
     # convert to float32
     img2 = convert_dtype(img, np.float32)
@@ -542,6 +542,8 @@ def main(argv):
     argp.add_argument('--log-freq', type=int, default=1000)
     argp.add_argument('--processes', type=int, default=8)
     argp.add_argument('--dtype', default='float16')
+    bool_argument(argp, 'test', False)
+    bool_argument(argp, 'augment', True)
     bool_argument(argp, 'pre-down', True)
     bool_argument(argp, 'linear', False)
     bool_argument(argp, 'mixup', False)
@@ -553,6 +555,12 @@ def main(argv):
     argp.add_argument('--noise-corr', type=float, default=0.75)
     # parse
     args = argp.parse_args(argv[1:])
+    # force argument
+    if args.test:
+        args.augment = False
+        args.pre_down = False
+        args.linear = False
+        args.mixup = False
     # run data writer
     writer = DataWriter(args)
     writer()

@@ -9,19 +9,21 @@ import zimg
 from time import time
 from utils import eprint, reset_random, listdir_files, bool_argument
 
+# NOTE: ZIMG implement BT709, BT601, BT2020 transfer as a gamma=2.4 curve, which differs from the standards
+
 def convert_dtype(img, dtype):
     src_dtype = img.dtype
     if dtype == src_dtype: # skip same type
         return img
     elif dtype == np.uint16:
         if src_dtype == np.uint8:
-            img = np.uint16(img) * 255
+            img = np.uint16(img) * 257
         elif src_dtype != np.uint16:
             img = np.clip(img, 0, 1)
             img = np.uint16(img * 65535 + 0.5)
     elif dtype == np.uint8:
         if src_dtype == np.uint16:
-            img = np.uint8((img + 128) // 257)
+            img = np.uint8((np.int32(img) + 128) // 257)
         elif src_dtype != np.uint8:
             img = np.clip(img, 0, 1)
             img = np.uint8(img * 255 + 0.5)
@@ -261,6 +263,7 @@ def random_quantize(src, dtype=None, channel_first=False):
         preset = list(webp.WebPPreset)
         preset = preset[np.random.randint(0, len(preset))]
         quality = np.random.uniform(0, 10) ** 2 # [0, 100) with gamma correction (gamma=2)
+        # print('WebP: preset={}, quality={}'.format(preset, quality))
         # encode and decode
         last = np.copy(last, order='C')
         pic = webp.WebPPicture.from_numpy(last)
@@ -271,8 +274,9 @@ def random_quantize(src, dtype=None, channel_first=False):
         subsampling = ['4:4:4'] * 3 + ['4:2:2', '4:2:0']
         subsampling = subsampling[np.random.randint(0, len(subsampling))]
         quality = np.random.randint(1, 101)
-        qtables = [None] * 2 + ['web_low', 'web_high']
+        qtables = [None, 'web_low', 'web_high']
         qtables = qtables[np.random.randint(0, len(qtables))]
+        # print('JPEG: sub={}, qtables={}, quality={}'.format(subsampling, qtables, quality))
         # encode and decode
         with BytesIO() as buffer:
             im = Image.fromarray(last)
@@ -344,7 +348,7 @@ def pre_process(config, img, dtype=np.float32):
     # convert to float32
     img2 = convert_dtype(img, np.float32)
     # random filter (input)
-    transfer = [None, None, 'BT2020_12', 'IEC_61966_2_1']
+    transfer = transfer = [None] * 3 + ['BT470_M', 'IEC_61966_2_1', 'IEC_61966_2_1']
     transfer = transfer[np.random.randint(0, len(transfer))]
     matrix = ['BT709'] * 3 + ['ST170_M', 'BT2020_NCL']
     matrix = matrix[np.random.randint(0, len(matrix))]
@@ -378,7 +382,6 @@ def pre_process(config, img, dtype=np.float32):
 
 def mixup(config, img1, img2, alpha=1.2, dtype=np.float32):
     # process and mixup in float32
-    # TODO: linear light?
     inter_dtype = dtype if dtype in [np.float16, np.float32, np.float64] else np.float32
     _input1, _label1 = pre_process(config, img1, inter_dtype)
     _input2, _label2 = pre_process(config, img2, inter_dtype)
@@ -544,13 +547,13 @@ def main(argv):
     argp.add_argument('--dtype', default='float16')
     bool_argument(argp, 'test', False)
     bool_argument(argp, 'augment', True)
-    bool_argument(argp, 'pre-down', True)
+    bool_argument(argp, 'pre-down', False)
     bool_argument(argp, 'linear', False)
     bool_argument(argp, 'mixup', False)
     argp.add_argument('--scale', type=int, default=1)
     argp.add_argument('--patch-width', type=int, default=256)
     argp.add_argument('--patch-height', type=int, default=256)
-    argp.add_argument('--transfer', default='BT709')
+    argp.add_argument('--transfer', default='IEC_61966_2_1')
     argp.add_argument('--noise-str', type=float, default=0.03)
     argp.add_argument('--noise-corr', type=float, default=0.75)
     # parse
@@ -558,7 +561,6 @@ def main(argv):
     # force argument
     if args.test:
         args.augment = False
-        args.pre_down = False
         args.linear = False
         args.mixup = False
     # run data writer

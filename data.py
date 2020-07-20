@@ -10,13 +10,13 @@ def convert_dtype(img, dtype):
         return img
     elif dtype == np.uint16:
         if src_dtype == np.uint8:
-            img = np.uint16(img) * 255
+            img = np.uint16(img) * 257
         elif src_dtype != np.uint16:
             img = np.clip(img, 0, 1)
             img = np.uint16(img * 65535 + 0.5)
     elif dtype == np.uint8:
         if src_dtype == np.uint16:
-            img = np.uint8((img + 128) // 257)
+            img = np.uint8((np.int32(img) + 128) // 257)
         elif src_dtype != np.uint8:
             img = np.clip(img, 0, 1)
             img = np.uint8(img * 255 + 0.5)

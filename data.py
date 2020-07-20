@@ -201,7 +201,7 @@ class DataBase:
         labels2 = convert_dtype(labels2, np.float32)
         # mixup
         alpha = 1.2
-        _lambda = np.random.beta(alpha, alpha)
+        _lambda = np.random.beta(alpha, alpha, (inputs.shape[0], 1, 1, 1))
         inputs = _lambda * inputs + (1 - _lambda) * inputs2
         labels = _lambda * labels + (1 - _lambda) * labels2
         # return

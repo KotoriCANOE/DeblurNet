@@ -466,6 +466,68 @@ size: 32x3x128x128
 val size: 64 => 256
 random seed: 0
 
+## 127
+
+(improve quite a bit)
+steps: 511000
+dataset: Mixup (epoch=1)
+
+## 128
+
+steps: 511000
+dataset: Mixup (epoch=4)
+
+## 129
+
+(slight improvement)
+steps: 511000
+dataset: no Mixup (epoch=4)
+add tanh to the output
+
+## 130
+
+(improve quite a lot)
+steps: 511000
+dataset: no Mixup (epoch=4)
+predict in linear light (BT.709), loss in linear light
+
+## 131
+
+(slightly better than ## 130 regarding loss in gamma)
+steps: 511000
+dataset: no Mixup (epoch=4)
+predict in linear light (BT.709), loss in gamma corrected
+(add epsilon to avoid inf gradients)
+
+## 132
+
+(worse than ## 126)
+steps: 255000
+dataset: new one in linear light (epoch=1)
+Mixup: on
+predict in linear light (BT.709), loss in gamma corrected
+(wrong implementation of Mixup, where the lambda within each batch are the same)
+
+## 133
+
+(worse than ## 126)
+steps: 127000
+dataset: new one in linear light (epoch=5)
+(wrong implementation of Mixup, where the lambda within each batch are the same)
+
+## 134
+
+steps: 511000
+dataset: new one in linear light (epoch=8)
+Mixup: off
+
+## 135
+
+steps: 511000
+dataset: new one in linear light (epoch=8)
+Mixup: on
+(fix implementation of Mixup)
+
 ---
 
 ## 200

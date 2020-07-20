@@ -12,7 +12,8 @@ class Model:
         self.data_format = DATA_FORMAT
         self.input_range = 2 # internal range of input. 1: [0,1], 2: [-1,1]
         self.output_range = 2 # internal range of output. 1: [0,1], 2: [-1,1]
-        self.transfer = 'BT709'
+        self.transfer = 'SRGB'
+        self.loss_transfer = 'SRGB'
         self.in_channels = 3
         self.out_channels = 3
         # train parameters
@@ -25,6 +26,8 @@ class Model:
         self.config = config
         if config is not None:
             self.__dict__.update(config.__dict__)
+        self.transfer = self.transfer.upper()
+        self.loss_transfer = self.loss_transfer.upper()
         # internal parameters
         self.input_shape = [None, None, None, None]
         self.input_shape[-3 if self.data_format == 'NCHW' else -1] = self.in_channels
@@ -37,7 +40,8 @@ class Model:
         argp.add_argument('--data-format', default='NCHW')
         argp.add_argument('--input-range', type=int, default=2)
         argp.add_argument('--output-range', type=int, default=2)
-        argp.add_argument('--transfer', default='BT709')
+        argp.add_argument('--transfer', default='SRGB')
+        argp.add_argument('--loss-transfer', default='SRGB')
         # training parameters
         argp.add_argument('--learning-rate', type=float, default=1e-3)
         argp.add_argument('--weight-decay', type=float, default=5e-5)
@@ -66,8 +70,8 @@ class Model:
         # convert to gamma
         self.outputs = layers.Linear2Gamma(outputs, self.transfer)
         self.outputs = tf.identity(self.outputs, name='Output')
-        self.outputs_gamma = (self.outputs if self.transfer.upper() == 'BT709'
-            else layers.Linear2Gamma(outputs, 'BT709'))
+        self.outputs_gamma = (self.outputs if self.transfer == self.loss_transfer
+            else layers.Linear2Gamma(outputs, self.loss_transfer))
         # all the saver variables
         self.svars = self.generator.svars
         # all the restore variables
@@ -83,9 +87,9 @@ class Model:
             self.labels = tf.identity(labels, name='Label')
             self.labels.set_shape(self.output_shape)
         # convert to gamma if it's linear
-        if self.transfer.upper() != 'BT709':
+        if self.transfer != self.loss_transfer:
             labels = layers.Gamma2Linear(self.labels, self.transfer)
-            self.labels_gamma = layers.Linear2Gamma(labels, 'BT709')
+            self.labels_gamma = layers.Linear2Gamma(labels, self.loss_transfer)
         # build model
         self.build_model(inputs)
         # build losses

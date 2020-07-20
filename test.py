@@ -16,8 +16,8 @@ def test_losses(ref, pred, data_format, epsilon=1e-8):
     predY = layers.RGB2Y(pred, data_format)
     sRGB_SSIM = layers.MS_SSIM(refY, predY, L=1, data_format=data_format)
     # linear RGB color space
-    ref = layers.Gamma2Linear(ref, 'BT709')
-    pred = layers.Gamma2Linear(pred, 'BT709')
+    ref = layers.Gamma2Linear(ref, 'SRGB')
+    pred = layers.Gamma2Linear(pred, 'SRGB')
     RGB_MSE = tf.losses.mean_squared_error(ref, pred, weights=1.0)
     RGB_PSNR = (10 / np.log(10)) * tf.math.log(1 / (RGB_MSE + epsilon))
     RGB_MAD = tf.losses.absolute_difference(ref, pred, weights=1.0)
@@ -128,7 +128,7 @@ class Test:
         if self.log_file:
             from datetime import datetime
             losses_mean = [l / self.epoch_steps for l in losses_sum]
-            test_log = ('PSNR (sRGB):{}, MAD (sRGB): {}, MS-SSIM (sRGB)' +
+            test_log = ('PSNR (sRGB):{}, MAD (sRGB): {}, MS-SSIM (sRGB), ' +
                 'PSNR (RGB):{}, MAD (RGB): {}, MS-SSIM (RGB)').format(*losses_mean)
             with open(self.log_file, 'a', encoding='utf-8') as fd:
                 fd.write('Testing No.{}\n'.format(self.postfix))

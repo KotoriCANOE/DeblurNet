@@ -65,7 +65,7 @@ class Model:
         outputs = self.generator(inputs, reuse=None)
         # outputs
         if self.output_range == 2:
-            outputs = tf.tanh(outputs)
+            # outputs = tf.tanh(outputs)
             outputs = tf.multiply(outputs + 1, 0.5)
         # convert to gamma
         self.outputs = layers.Linear2Gamma(outputs, self.transfer)
@@ -90,6 +90,8 @@ class Model:
         if self.transfer != self.loss_transfer:
             labels = layers.Gamma2Linear(self.labels, self.transfer)
             self.labels_gamma = layers.Linear2Gamma(labels, self.loss_transfer)
+        else:
+            self.labels_gamma = self.labels
         # build model
         self.build_model(inputs)
         # build losses
@@ -131,7 +133,7 @@ class Model:
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, 'Generator')
         # learning rate
         # steps/decay: 2047000/0.999, 1023000/0.998
-        lr_mul = layers.ExpCosineRestartsDecay(1.0, global_step, exp_decay=0.998, warmup_cycle=6) # cycle=6
+        lr_mul = layers.ExpCosineRestartsDecay(1.0, global_step, exp_decay=0.999, warmup_cycle=6)
         # lr_mul = layers.PlateauDecay(1.0, global_step, self.g_loss)
         lr = self.learning_rate * lr_mul
         wd = self.weight_decay * lr_mul

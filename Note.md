@@ -438,8 +438,8 @@ dataset: Pixiv bookmark (epoch=1)
 steps: 511000
 dataset: Pixiv bookmark (epoch=1)
 improved pre-processing
-use packed data but forgot to set batch size so val size is unexpected
 val size: 256 => 64
+(use packed data but forgot to set batch size, so val size is unexpected)
 
 ## 123
 
@@ -460,6 +460,7 @@ random shuffle before selecting val set
 
 ## 126
 
+(test loss raises at the end)
 steps: 511000
 dataset: Pixiv bookmark + COCO (epoch=4)
 size: 32x3x128x128
@@ -468,7 +469,7 @@ random seed: 0
 
 ## 127
 
-(improve quite a bit)
+(slight improvement)
 steps: 511000
 dataset: Mixup (epoch=1)
 
@@ -479,10 +480,11 @@ dataset: Mixup (epoch=4)
 
 ## 129
 
-(slight improvement)
+(worse than ## 126, especially on linear loss)
 steps: 511000
 dataset: no Mixup (epoch=4)
-add tanh to the output
+tanh: on
+(add tanh to the output)
 
 ## 130
 
@@ -490,6 +492,7 @@ add tanh to the output
 steps: 511000
 dataset: no Mixup (epoch=4)
 predict in linear light (BT.709), loss in linear light
+loss: BT.709 transfer
 
 ## 131
 
@@ -497,36 +500,132 @@ predict in linear light (BT.709), loss in linear light
 steps: 511000
 dataset: no Mixup (epoch=4)
 predict in linear light (BT.709), loss in gamma corrected
+loss: BT.709 transfer
 (add epsilon to avoid inf gradients)
 
 ## 132
 
 (worse than ## 126)
 steps: 255000
-dataset: new one in linear light (epoch=1)
-Mixup: on
+dataset: BT.709 to linear (epoch=1)
+Mixup: on - linear on inputs, linear on labels
 predict in linear light (BT.709), loss in gamma corrected
+loss: BT.709 transfer
 (wrong implementation of Mixup, where the lambda within each batch are the same)
 
 ## 133
 
 (worse than ## 126)
 steps: 127000
-dataset: new one in linear light (epoch=5)
+dataset: BT.709 to linear (epoch=5)
+Mixup: on - linear on inputs, linear on labels
+loss: BT.709 transfer
 (wrong implementation of Mixup, where the lambda within each batch are the same)
 
 ## 134
 
 steps: 511000
-dataset: new one in linear light (epoch=8)
+dataset: BT.709 to linear (epoch=8)
 Mixup: off
+loss: BT.709 transfer
 
 ## 135
 
 steps: 511000
-dataset: new one in linear light (epoch=8)
-Mixup: on
+dataset: BT.709 to linear (epoch=8)
+Mixup: on - linear on inputs, linear on labels
+loss: BT.709 transfer
 (fix implementation of Mixup)
+
+## 136
+
+steps: 255000
+dataset: sRGB to linear (epoch=2)
+Mixup: off
+loss: sRGB transfer
+(ZIMG implement BT.709 as a gamma=2.4 curve, so change to sRGB)
+
+## 137
+
+(worse than ## 136)
+steps: 255000
+dataset: sRGB to linear (epoch=2)
+Mixup: on - linear on inputs, linear on labels
+loss: sRGB transfer
+
+## 138
+
+(worse than ## 136)
+steps: 255000
+dataset: sRGB to linear (epoch=2)
+Mixup: on - linear on inputs, linear on labels
+loss: linear transfer
+
+## 139
+
+steps: 255000|511000
+dataset: sRGB to linear (epoch=2|8)
+Mixup: off
+loss: sRGB transfer
+tanh: off
+(remove tanh)
+
+## 140
+
+(worse)
+steps: 255000
+dataset: sRGB to linear (epoch=2)
+Mixup: on - linear on inputs, gamma on labels
+loss: sRGB transfer
+tanh: off
+
+## 141
+
+steps: 255000|511000
+dataset: sRGB to linear (epoch=2|8)
+Mixup: off
+loss: linear transfer
+tanh: off
+
+## 142
+
+steps: 255000|511000
+dataset: sRGB to linear (epoch=2|8)
+Mixup: on - linear on inputs, linear on outputs
+loss: sRGB transfer
+tanh: off
+
+## 143
+
+steps: 255000|511000
+dataset: sRGB to linear (epoch=2|8)
+Mixup: on - linear on inputs, linear on outputs
+loss: linear transfer
+tanh: off
+
+## 144
+
+(best one in Mixup)
+steps: 511000
+dataset: sRGB to linear (epoch=8)
+Mixup: on - sRGB on inputs, sRGB on outputs
+loss: sRGB transfer
+tanh: off
+
+## 145
+
+(chosen)
+steps: 2047000
+dataset: sRGB to linear (epoch=8)
+Mixup: off
+loss: sRGB transfer
+
+## 146
+
+steps: 2047000
+dataset: sRGB to linear (epoch=8)
+Mixup: off
+loss: linear transfer
 
 ---
 

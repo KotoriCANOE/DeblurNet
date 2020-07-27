@@ -14,7 +14,8 @@ def test_losses(ref, pred, data_format, epsilon=1e-8):
     sRGB_MAD = tf.losses.absolute_difference(ref, pred, weights=1.0)
     refY = layers.RGB2Y(ref, data_format)
     predY = layers.RGB2Y(pred, data_format)
-    sRGB_SSIM = layers.MS_SSIM(refY, predY, L=1, data_format=data_format)
+    # sRGB_SSIM = layers.MS_SSIM(refY, predY, L=1, data_format=data_format)
+    sRGB_SSIM = layers.MS_SSIM2(refY, predY, L=1, data_format=data_format)
     # linear RGB color space
     ref = layers.Gamma2Linear(ref, 'SRGB')
     pred = layers.Gamma2Linear(pred, 'SRGB')
@@ -23,7 +24,8 @@ def test_losses(ref, pred, data_format, epsilon=1e-8):
     RGB_MAD = tf.losses.absolute_difference(ref, pred, weights=1.0)
     refY = layers.RGB2Y(ref, data_format)
     predY = layers.RGB2Y(pred, data_format)
-    RGB_SSIM = layers.MS_SSIM(refY, predY, L=1, data_format=data_format)
+    # RGB_SSIM = layers.MS_SSIM(refY, predY, L=1, data_format=data_format)
+    RGB_SSIM = layers.MS_SSIM2(refY, predY, L=1, data_format=data_format)
     # return each loss
     return sRGB_PSNR, sRGB_MAD, sRGB_SSIM, RGB_PSNR, RGB_MAD, RGB_SSIM
 
@@ -128,8 +130,8 @@ class Test:
         if self.log_file:
             from datetime import datetime
             losses_mean = [l / self.epoch_steps for l in losses_sum]
-            test_log = ('PSNR (sRGB):{}, MAD (sRGB): {}, MS-SSIM (sRGB), ' +
-                'PSNR (RGB):{}, MAD (RGB): {}, MS-SSIM (RGB)').format(*losses_mean)
+            test_log = ('PSNR (sRGB):{}, MAD (sRGB): {}, MS-SSIM-2 (sRGB): {}, ' +
+                'PSNR (RGB):{}, MAD (RGB): {}, MS-SSIM-2 (RGB): {}').format(*losses_mean)
             with open(self.log_file, 'a', encoding='utf-8') as fd:
                 fd.write('Testing No.{}\n'.format(self.postfix))
                 fd.write(self.test_dir + '\n')

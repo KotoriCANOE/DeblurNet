@@ -62,12 +62,12 @@ class DataBase:
         bool_argument(argp, 'packed', False)
         bool_argument(argp, 'test', test)
         # pre-processing parameters
-        argp.add_argument('--processes', type=int, default=2)
+        argp.add_argument('--processes', type=int, default=4)
         argp.add_argument('--threads', type=int, default=1)
         argp.add_argument('--prefetch', type=int, default=64)
         argp.add_argument('--buffer-size', type=int, default=256)
         bool_argument(argp, 'shuffle', True)
-        bool_argument(argp, 'mixup', True)
+        bool_argument(argp, 'mixup', False)
 
     @staticmethod
     def parse_arguments(args):
@@ -186,6 +186,17 @@ class DataBase:
         return inputs, labels
 
     @classmethod
+    def linear2gamma(cls, last, epsilon=1e-8):
+        power = 1 / 2.4
+        slope = 12.9232102
+        alpha = 1.055
+        k0 = 11 / 280
+        beta = k0 / slope
+        last = np.where(last < beta, slope * last,
+            alpha * (last + epsilon) ** power - (alpha - 1))
+        return last
+
+    @classmethod
     def extract_batch_mixup(cls, batch_set, batch_set2):
         # load the batch
         with np.load(batch_set) as npz:
@@ -199,6 +210,11 @@ class DataBase:
         labels = convert_dtype(labels, np.float32)
         inputs2 = convert_dtype(inputs2, np.float32)
         labels2 = convert_dtype(labels2, np.float32)
+        # linear to gamma
+        inputs = cls.linear2gamma(inputs)
+        inputs2 = cls.linear2gamma(inputs2)
+        labels = cls.linear2gamma(labels)
+        labels2 = cls.linear2gamma(labels2)
         # mixup
         alpha = 1.2
         _lambda = np.random.beta(alpha, alpha, (inputs.shape[0], 1, 1, 1))
@@ -212,8 +228,9 @@ class DataBase:
         _dataset = dataset.copy()
         _dataset2 = dataset.copy() # mixup dataset
         max_steps = epoch_steps * num_epochs
-        from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(self.threads) as executor:
+        # multi-process
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor(self.processes) as executor:
             futures = []
             # loop over epochs
             for epoch in range(start // epoch_steps, num_epochs):

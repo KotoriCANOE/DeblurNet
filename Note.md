@@ -606,11 +606,10 @@ tanh: off
 ## 144
 
 (best one in Mixup)
-steps: 511000
+steps: 511000|2047000
 dataset: sRGB to linear (epoch=8)
 Mixup: on - sRGB on inputs, sRGB on outputs
 loss: sRGB transfer
-tanh: off
 
 ## 145
 

@@ -24,7 +24,10 @@ def format_select(format, NCHW, NHWC):
 
 def Swish(last, scope=None):
     with tf.variable_scope(scope, 'Swish'):
-        return last * tf.nn.sigmoid(last)
+        try:
+            return tf.nn.swish(last)
+        except Exception:
+            return last * tf.nn.sigmoid(last)
 
 def PReLU(last, format=None, collections=None, dtype=tf.float32, scope=None):
     if format is None:

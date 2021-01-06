@@ -1,0 +1,57 @@
+{
+    "random_resize": {
+        "Point": 3,
+        "Bilinear": 9,
+        "Spline16": 10,
+        "Spline36": 11,
+        "Spline64": 12,
+        "Lanczos": 28,
+
+        "Hermite": 30,
+        "B-Spline": 32,
+        "RobidouxSoft": 34,
+        "Robidoux": 36,
+        "Mitchell": 38,
+        "RobidouxSharp": 40,
+        "Catmull-Rom": 50,
+
+        "KeysCubic": 70,
+        "SoftCubic": 75,
+        "SharpCubic": 80,
+
+        "ArtifactCubic": 86,
+
+        "ArbitraryCubic": 100
+    },
+    "random_filter": {
+        "max_scale": 1.0,
+        "min_scale": -3.0,
+
+        "NoScale": 5,
+        "UpScale": 10,
+        "DownScale": 100
+    },
+    "random_noise": {
+        "noise_str": 0.01,
+        "noise_corr": 0.50,
+
+        "NoNoise": 50,
+        "RGB": 70,
+        "YUV444": 85,
+        "Y": 100
+    },
+    "random_chroma": {
+        "RGB": 30,
+        "YUV420": 100
+    },
+    "random_quantize": {
+        "NoQuant": 25,
+        "Quant8": 50,
+        "WebP": 75,
+        "JPEG": 100,
+
+        "webp_gamma": 0.5,
+        "jpeg_mean": 90,
+        "jpeg_std": 30
+    }
+}

@@ -36,45 +36,45 @@ def convert_dtype(img, dtype):
     # return
     return img
 
-def random_resize(src, dw, dh, roi_left=0, roi_top=0, roi_width=0, roi_height=0, channel_first=False):
+def random_resize(param, src, dw, dh, roi_left=0, roi_top=0, roi_width=0, roi_height=0, channel_first=False):
     rand_val = np.random.randint(0, 100)
-    if rand_val < 2:
+    if rand_val < param['Point']:
         dst = zimg.resize(src, dw, dh, 'Point', channel_first=channel_first,
             roi_left=roi_left, roi_top=roi_top, roi_width=roi_width, roi_height=roi_height)
-    elif rand_val < 4:
+    elif rand_val < param['Bilinear']:
         dst = zimg.resize(src, dw, dh, 'Bilinear', channel_first=channel_first,
             roi_left=roi_left, roi_top=roi_top, roi_width=roi_width, roi_height=roi_height)
-    elif rand_val < 6:
+    elif rand_val < param['Spline16']:
         dst = zimg.resize(src, dw, dh, 'Spline16', channel_first=channel_first,
             roi_left=roi_left, roi_top=roi_top, roi_width=roi_width, roi_height=roi_height)
-    elif rand_val < 8:
+    elif rand_val < param['Spline36']:
         dst = zimg.resize(src, dw, dh, 'Spline36', channel_first=channel_first,
             roi_left=roi_left, roi_top=roi_top, roi_width=roi_width, roi_height=roi_height)
-    elif rand_val < 10:
+    elif rand_val < param['Spline64']:
         dst = zimg.resize(src, dw, dh, 'Spline64', channel_first=channel_first,
             roi_left=roi_left, roi_top=roi_top, roi_width=roi_width, roi_height=roi_height)
-    elif rand_val < 28: # Lanczos(taps=2~19)
+    elif rand_val < param['Lanczos']: # Lanczos(taps=2~19)
         taps = np.random.randint(2, 20)
         dst = zimg.resize(src, dw, dh, 'Lanczos', taps, channel_first=channel_first,
             roi_left=roi_left, roi_top=roi_top, roi_width=roi_width, roi_height=roi_height)
     else: # Bicubic
-        if rand_val < 46:
-            if rand_val < 30: # Hermite
+        if rand_val < param['Catmull-Rom']:
+            if rand_val < param['Hermite']: # Hermite
                 B = 0
                 C = 0
-            elif rand_val < 32: # B-Spline
+            elif rand_val < param['B-Spline']: # B-Spline
                 B = 1
                 C = 0
-            elif rand_val < 34: # Robidoux Soft
+            elif rand_val < param['RobidouxSoft']: # Robidoux Soft
                 B = 0.67962275898295921 # (9-3*sqrt(2))/7
                 C = 0.1601886205085204 # 0.5 - B * 0.5
-            elif rand_val < 36: # Robidoux
+            elif rand_val < param['Robidoux']: # Robidoux
                 B = 0.37821575509399866 # 12/(19+9*sqrt(2)
                 C = 0.31089212245300067 # 113/(58+216*sqrt(2))
-            elif rand_val < 38: # Mitchell
+            elif rand_val < param['Mitchell']: # Mitchell
                 B = 1 / 3
                 C = 1 / 3
-            elif rand_val < 40: # Robidoux Sharp
+            elif rand_val < param['RobidouxSharp']: # Robidoux Sharp
                 B = 0.2620145123990142 # 6/(13+7*sqrt(2))
                 C = 0.3689927438004929 # 7/(2+12*sqrt(2)
             else: # Catmull-Rom
@@ -84,21 +84,21 @@ def random_resize(src, dw, dh, roi_left=0, roi_top=0, roi_width=0, roi_height=0,
             if np.random.randint(0, 10) > 1:
                 B += np.random.normal(0, 0.05)
                 C += np.random.normal(0, 0.05)
-        elif rand_val < 80:
-            if rand_val < 66: # Keys Cubic
+        elif rand_val < param['SharpCubic']:
+            if rand_val < param['KeysCubic']: # Keys Cubic
                 B = np.random.uniform(0, 2 / 3) + np.random.normal(0, 1 / 3)
                 C = 0.5 - B * 0.5
-            elif rand_val < 74: # Soft Cubic
+            elif rand_val < param['SoftCubic']: # Soft Cubic
                 B = np.random.uniform(0.5, 1) + np.random.normal(0, 0.25)
                 C = 1 - B
             else: # Sharp Cubic
                 B = np.random.uniform(-0.75, -0.25) + np.random.normal(0, 0.25)
                 C = B * -0.5
             # randomly alternate the kernel with 70%/90% probability
-            if np.random.randint(0, 10) > (2 if rand_val < 66 else 0):
+            if np.random.randint(0, 10) > (2 if rand_val < param['KeysCubic'] else 0):
                 B += np.random.normal(0, 1 / 6)
                 C += np.random.normal(0, 1 / 6)
-        elif rand_val < 85:
+        elif rand_val < param['ArtifactCubic']: # artifact Cubic
             B = np.random.uniform(-1.5, 1.5) # amount of haloing
             C = -1 # when c is around b * 0.8, aliasing is minimum
             if B >= 0: # with aliasing
@@ -120,7 +120,8 @@ def random_resize(src, dw, dh, roi_left=0, roi_top=0, roi_width=0, roi_height=0,
             roi_left=roi_left, roi_top=roi_top, roi_width=roi_width, roi_height=roi_height)
     return dst
 
-def random_filter(src, dw=None, dh=None, channel_first=False):
+def random_filter(params, src, dw=None, dh=None, channel_first=False):
+    param = params['random_filter']
     last = src
     sw = src.shape[-1 if channel_first else -2]
     sh = src.shape[-2 if channel_first else -3]
@@ -129,29 +130,33 @@ def random_filter(src, dw=None, dh=None, channel_first=False):
     if dh is None:
         dh = sh
     scale = np.sqrt((dw * dh) / (sw * sh))
-    # random number
-    rand_updown = np.random.randint(0, 10)
-    if rand_updown < 1: # no scale
+    # random number for scaling
+    rand_val = np.random.randint(0, 100)
+    if rand_val < param['NoScale']: # no scale
         rand_scale = 0
-    elif rand_updown < 3: # up scale
-        max_scale = max(1, np.log2(scale * 2))
+    elif rand_val < param['UpScale']: # up scale
+        max_scale = max(0, np.log2(scale)) + 1
         rand_scale = np.random.uniform(0, max_scale)
-    else: # down scale
-        min_scale = min(-2, np.log2(scale * 0.5))
+    elif rand_val < param['DownScale']: # down scale
+        min_scale = min(0, np.log2(scale)) - 2
         rand_scale = np.random.uniform(min_scale, 0)
-    rand_scale = 2 ** rand_scale # [0.25, 1) + [1, 4)
+    rand_scale = 2 ** rand_scale # [0.25, 1) + [1, 2)
     # random resize
     if rand_scale != 1: # random scale
         tw = int(sw * rand_scale + 0.5)
         th = int(sh * rand_scale + 0.5)
         # print('{}x{} => {}x{} => {}x{}'.format(sw, sh, tw, th, dw, dh))
-        last = random_resize(last, tw, th, channel_first=channel_first)
+        last = random_resize(params['random_resize'], last, tw, th,
+            channel_first=channel_first)
     if rand_scale != 1 or dw != sw or dh != sh: # scale to target size
-        last = random_resize(last, dw, dh, channel_first=channel_first)
+        last = random_resize(params['random_resize'], last, dw, dh,
+            channel_first=channel_first)
     # return
     return last
 
-def random_noise(src, noise_str=0.03, noise_corr=0.75, matrix=None, channel_first=False):
+def random_noise(param, src, matrix=None, channel_first=False):
+    if param['noise_str'] <= 0.0:
+        return src
     last = src
     if matrix is None:
         matrix = ['BT709', 'ST170_M', 'BT2020_NCL'][np.random.randint(0, 3)]
@@ -165,35 +170,35 @@ def random_noise(src, noise_str=0.03, noise_corr=0.75, matrix=None, channel_firs
     # noise shape, scale and spatial correlation
     shapeRGB = last.shape
     shapeY = last.shape[1:] if channel_first else last.shape[:-1]
-    corrY = np.abs(np.random.normal(0.0, noise_corr))
-    corrY = 0 if corrY > noise_corr * 3 else corrY # no correlation if > sigma*3
-    scaleY = np.abs(np.random.normal(0.0, noise_str)) * (1 + corrY)
-    corrC = np.abs(np.random.normal(0.0, noise_corr))
-    corrC = 0 if corrC > noise_corr * 3 else corrC # no correlation if > sigma*3
-    scaleC = np.abs(np.random.normal(0.0, noise_str)) * (1 + corrC)
+    corrY = np.abs(np.random.normal(0.0, param['noise_corr']))
+    corrY = 0 if corrY > param['noise_corr'] * 3 else corrY # no correlation if > sigma*3
+    scaleY = np.abs(np.random.normal(0.0, param['noise_str'])) * (1 + corrY)
+    corrC = np.abs(np.random.normal(0.0, param['noise_corr']))
+    corrC = 0 if corrC > param['noise_corr'] * 3 else corrC # no correlation if > sigma*3
+    scaleC = np.abs(np.random.normal(0.0, param['noise_str'])) * (1 + corrC)
     # noise type
-    rand_noise = np.random.randint(0, 10)
-    # print('{}, Y: {}|{}, C: {}|{}'.format(rand_noise, scaleY, corrY, scaleC, corrC))
-    if rand_noise < 2: # RGB noise
+    rand_val = np.random.randint(0, 100)
+    # print('{}, Y: {}|{}, C: {}|{}'.format(rand_val, scaleY, corrY, scaleC, corrC))
+    if rand_val < param['NoNoise']:
+        pass
+    if rand_val < param['RGB']: # RGB noise
         noise = noise_gen(shapeRGB, scaleY, corrY, channel_first=channel_first)
         last = last + noise
-    elif rand_noise < 4: # YUV444 noise
+    elif rand_val < param['YUV444']: # YUV444 noise
         noiseY = noise_gen(shapeY, scaleY, corrY, channel_first=channel_first)
         noiseU = noise_gen(shapeY, scaleC, corrC, channel_first=channel_first)
         noiseV = noise_gen(shapeY, scaleC, corrC, channel_first=channel_first)
         noise = np.stack([noiseY, noiseU, noiseV], axis=0 if channel_first else -1)
         noise = zimg.convertFormat(noise, channel_first=channel_first, matrix_in=matrix, matrix='rgb')
         last = last + noise
-    elif rand_noise < 7: # Y noise
+    elif rand_val < param['Y']: # Y noise
         noiseY = noise_gen(shapeY, scaleY, corrY, channel_first=channel_first)
         noise = np.stack([noiseY] * 3, axis=0 if channel_first else -1)
         last = last + noise
-    else: # no noise
-        pass
     # return
     return last
 
-def random_chroma(src, matrix=None, channel_first=False):
+def random_chroma(param, src, matrix=None, channel_first=False):
     last = src
     sw = src.shape[-1 if channel_first else -2]
     sh = src.shape[-2 if channel_first else -3]
@@ -210,23 +215,25 @@ def random_chroma(src, matrix=None, channel_first=False):
     # 0: YUV420, MPEG-1 chroma placement
     # 1: YUV420, MPEG-2 chroma placement
     # 2~5: RGB
-    rand_yuv = np.random.randint(0, 6)
-    # convert RGB to YUV420
-    if rand_yuv < 2:
+    rand_val = np.random.randint(0, 100)
+    # chroma sub-sampling
+    if rand_val < param['RGB']:
+        pass
+    elif rand_val < param['YUV420']:
+        # convert RGB to YUV420
         last = zimg.convertFormat(last, channel_first=channel_first, matrix_in='rgb', matrix=matrix)
         lastY = last[0] if channel_first else last[:, :, 0]
         lastU = last[1] if channel_first else last[:, :, 1]
         lastV = last[2] if channel_first else last[:, :, 2]
         filter_params = filters[np.random.randint(0, len(filters))]
         resizer = zimg.Resizer.createScale(lastU, 0.5, **filter_params, channel_first=channel_first,
-            roi_left=0 if rand_yuv % 2 == 0 else -0.5)
+            roi_left=0 if rand_val % 2 == 0 else -0.5)
         lastU = resizer(lastU)
         lastV = resizer(lastV)
-    # convert YUV420 to RGB
-    if rand_yuv < 2:
+        # convert YUV420 to RGB
         filter_params = filters[np.random.randint(0, len(filters))]
         resizer = zimg.Resizer.create(lastU, sw, sh, **filter_params, channel_first=channel_first,
-            roi_left=0 if rand_yuv % 2 == 0 else 0.25)
+            roi_left=0 if rand_val % 2 == 0 else 0.25)
         lastU = resizer(lastU)
         lastV = resizer(lastV)
         last = np.stack((lastY, lastU, lastV), axis=0 if channel_first else -1)
@@ -237,32 +244,38 @@ def random_chroma(src, matrix=None, channel_first=False):
 def linear_resize(src, dw, dh, transfer, channel_first=False):
     last = src
     # convert to linear scale
-    if transfer.upper() == 'LINEAR':
+    if transfer.upper() != 'LINEAR':
         last = zimg.convertFormat(last, channel_first=channel_first, transfer_in=transfer, transfer='LINEAR')
     # resize
     last = zimg.resize(last, dw, dh, 'Bicubic', 0, 0.5, channel_first=channel_first)
     # convert back to gamma-corrected scale
-    if transfer.upper() == 'LINEAR':
+    if transfer.upper() != 'LINEAR':
         last = zimg.convertFormat(last, channel_first=channel_first, transfer_in='LINEAR', transfer=transfer)
     # return
     return last
 
-def random_quantize(src, dtype=None, channel_first=False):
+def random_quantize(param, src, dtype=None, channel_first=False):
     if dtype is None:
         dtype = src.dtype
     last = src
-    rand_val = np.random.randint(0, 4)
+    rand_val = np.random.randint(0, 100)
     # if needed, convert to 8-bit
-    if dtype == np.uint8 or rand_val > 0: # 1, 2, 3
+    if rand_val >= param['NoQuant']:
         last = convert_dtype(last, np.uint8)
     # if needed, convert CHW to HWC
-    if rand_val > 1 and channel_first:
+    if rand_val >= param['Quant8'] and channel_first:
         last = np.transpose(last, (1, 2, 0))
     # randomly encode image
-    if rand_val == 2: # 2: WebP
+    if rand_val < param['Quant8']:
+        pass
+    elif rand_val < param['WebP']: # WebP
         preset = list(webp.WebPPreset)
         preset = preset[np.random.randint(0, len(preset))]
-        quality = np.random.uniform(0, 10) ** 2 # [0, 100) with gamma correction (gamma=2)
+        # random quality in [0, 100) with gamma correction
+        # gamma > 1.0: bias towards small values
+        # 0.0 < gamma < 1.0: bias towards big values
+        gamma = param['webp_gamma']
+        quality = np.random.uniform(0, 100 ** (1 / gamma)) ** gamma
         # print('WebP: preset={}, quality={}'.format(preset, quality))
         # encode and decode
         last = np.copy(last, order='C')
@@ -270,12 +283,18 @@ def random_quantize(src, dtype=None, channel_first=False):
         config = webp.WebPConfig.new(preset=preset, quality=quality, lossless=False)
         data = pic.encode(config)
         last = data.decode(color_mode=webp.WebPColorMode.RGB)
-    elif rand_val == 3: # 3: JPEG
+    elif rand_val < param['JPEG']: # JPEG
         subsampling = ['4:4:4'] * 3 + ['4:2:2', '4:2:0']
         subsampling = subsampling[np.random.randint(0, len(subsampling))]
-        quality = np.random.randint(1, 101)
-        qtables = [None, 'web_low', 'web_high']
+        qtables = [None, None, 'web_low', 'web_high']
         qtables = qtables[np.random.randint(0, len(qtables))]
+        if qtables is None:
+            quality = 0
+            while not (1 <= quality <= 100):
+                quality = np.random.normal(param['jpeg_mean'], param['jpeg_std'])
+            quality = int(quality + 0.5)
+        else:
+            quality = np.random.randint(1, 101)
         # print('JPEG: sub={}, qtables={}, quality={}'.format(subsampling, qtables, quality))
         # encode and decode
         with BytesIO() as buffer:
@@ -284,9 +303,9 @@ def random_quantize(src, dtype=None, channel_first=False):
             im = Image.open(buffer)
             last = np.array(im, copy=False)
     # if needed, convert HWC to CHW
-    if rand_val > 1 and channel_first:
+    if rand_val >= param['Quant8'] and channel_first:
         last = np.transpose(last, (2, 0, 1))
-    # type conversion
+    # convert to output dtype
     last = convert_dtype(last, dtype)
     # return
     return last
@@ -348,27 +367,36 @@ def pre_process(config, img, dtype=np.float32):
     # convert to float32
     img2 = convert_dtype(img, np.float32)
     # random filter (input)
-    transfer = transfer = [None] * 3 + ['BT470_M', 'IEC_61966_2_1', 'IEC_61966_2_1']
+    transfer = [None] * 3 + ['BT470_M', 'IEC_61966_2_1', 'IEC_61966_2_1']
     transfer = transfer[np.random.randint(0, len(transfer))]
     matrix = ['BT709'] * 3 + ['ST170_M', 'BT2020_NCL']
     matrix = matrix[np.random.randint(0, len(matrix))]
     _input = img2
-    if transfer is not None: # randomly convert to linear scale
+    # randomly convert to linear scale
+    if transfer is not None:
         _input = zimg.convertFormat(_input, channel_first=channel_first, transfer_in=transfer, transfer='LINEAR')
-    _input = random_filter(_input, config.patch_width // config.scale, config.patch_height // config.scale,
-        channel_first=channel_first) # random filtering with resizer
-    if config.noise_str > 0: # random noise
-        _input = random_noise(_input, config.noise_str, config.noise_corr, matrix=matrix, channel_first=channel_first)
-    if transfer is not None: # convert back to gamma-corrected scale
+    # random filtering with resizer
+    _input = random_filter(config.params, _input,
+        config.patch_width // config.scale, config.patch_height // config.scale,
+        channel_first=channel_first)
+    # random noise
+    _input = random_noise(config.params['random_noise'], _input,
+        matrix=matrix, channel_first=channel_first)
+    # convert back to gamma-corrected scale
+    if transfer is not None:
         _input = zimg.convertFormat(_input, channel_first=channel_first, transfer_in='LINEAR', transfer=transfer)
-    _input = random_chroma(_input, matrix=matrix, channel_first=channel_first)
+    # random chroma sub-sampling
+    _input = random_chroma(config.params['random_chroma'], _input,
+        matrix=matrix, channel_first=channel_first)
     # random quantize, gamma2linear, type conversion (input)
     if config.linear:
-        _input = random_quantize(_input, np.float32, channel_first=channel_first)
+        _input = random_quantize(config.params['random_quantize'], _input,
+            np.float32, channel_first=channel_first)
         _input = zimg.convertFormat(_input, channel_first=channel_first, transfer_in=config.transfer, transfer='LINEAR')
         _input = convert_dtype(_input, dtype)
     else:
-        _input = random_quantize(_input, dtype, channel_first=channel_first)
+        _input = random_quantize(config.params['random_quantize'], _input,
+            dtype, channel_first=channel_first)
     # pre downscale and type conversion (label)
     _label = img2
     if config.linear:
@@ -538,6 +566,7 @@ def main(argv):
     argp = argparse.ArgumentParser(argv[0])
     argp.add_argument('input_dir')
     argp.add_argument('save_dir')
+    argp.add_argument('--params', required=True)
     argp.add_argument('--random-seed', type=int)
     argp.add_argument('--batch-size', type=int, default=1)
     argp.add_argument('--epochs', type=int, default=1)
@@ -554,8 +583,6 @@ def main(argv):
     argp.add_argument('--patch-width', type=int, default=256)
     argp.add_argument('--patch-height', type=int, default=256)
     argp.add_argument('--transfer', default='IEC_61966_2_1')
-    argp.add_argument('--noise-str', type=float, default=0.03)
-    argp.add_argument('--noise-corr', type=float, default=0.75)
     # parse
     args = argp.parse_args(argv[1:])
     # force argument
@@ -563,6 +590,10 @@ def main(argv):
         args.augment = False
         args.linear = False
         args.mixup = False
+    # load json
+    import json
+    with open(args.params) as fp:
+        args.params = json.load(fp)
     # run data writer
     writer = DataWriter(args)
     writer()

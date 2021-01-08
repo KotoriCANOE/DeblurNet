@@ -464,7 +464,8 @@ class DataWriter:
                 inputs.append(_input)
                 labels.append(_label)
             except Exception as err:
-                print('======\nError when processing {}\n{}\n------'.format(ifile, err))
+                import traceback
+                print('======\nError when processing {}\n{}\n{}\n------'.format(ifile, err, traceback.format_exc()))
                 # fill zero for data with error
                 _blank = np.zeros((3, config.patch_height, config.patch_width), dtype)
                 inputs.append(_blank)

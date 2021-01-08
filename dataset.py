@@ -135,10 +135,10 @@ def random_filter(params, src, dw=None, dh=None, channel_first=False):
     if rand_val < param['NoScale']: # no scale
         rand_scale = 0
     elif rand_val < param['UpScale']: # up scale
-        max_scale = max(0, np.log2(scale)) + 1
+        max_scale = max(0, np.log2(scale)) + param['max_scale']
         rand_scale = np.random.uniform(0, max_scale)
     elif rand_val < param['DownScale']: # down scale
-        min_scale = min(0, np.log2(scale)) - 2
+        min_scale = min(0, np.log2(scale)) + param['min_scale']
         rand_scale = np.random.uniform(min_scale, 0)
     rand_scale = 2 ** rand_scale # [0.25, 1) + [1, 2)
     # random resize

@@ -25,7 +25,7 @@
     },
     "random_filter": {
         "max_scale": 1.0,
-        "min_scale": -3.0,
+        "min_scale": -2.0,
 
         "NoScale": 5,
         "UpScale": 10,

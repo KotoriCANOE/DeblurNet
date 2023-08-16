@@ -1,6 +1,6 @@
 import tensorflow.compat.v1 as tf
 import numpy as np
-from collections import Iterable
+from collections.abc import Iterable
 
 ################################################################
 
@@ -188,6 +188,7 @@ def TransferConvert(l2g, last, transfer=None, gamma=1.0, epsilon=1e-8, scope=Non
                     ((1 / alpha) * (last + (alpha - 1))) ** power_rec)
         elif formula == 2:
             if l2g:
+                # omit beta, instead using log(x + epsilon) and max(0, x)
                 last = tf.math.maximum(0.0, 1.0 + (alpha / np.log(10)) * tf.math.log(last + epsilon))
             else:
                 last = tf.math.pow(10.0, (1 / alpha) * (last - 1.0))

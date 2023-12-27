@@ -606,6 +606,7 @@ tanh: off
 ## 144
 
 (best one in Mixup)
+train set: SR1.7 (noise)
 steps: 511000|2047000
 dataset: sRGB to linear (epoch=8)
 Mixup: on - sRGB on inputs, sRGB on outputs
@@ -614,6 +615,7 @@ loss: sRGB transfer
 ## 145
 
 (chosen)
+train set: SR1.7 (noise)
 steps: 2047000
 dataset: sRGB to linear (epoch=8)
 Mixup: off
@@ -621,10 +623,31 @@ loss: sRGB transfer
 
 ## 146
 
+train set: SR1.7 (noise)
 steps: 2047000
 dataset: sRGB to linear (epoch=8)
 Mixup: off
 loss: linear transfer
+
+## 147
+
+(from ## 145)
+train set: SR1.8 (noise)
+steps: 255000
+dataset: sRGB to linear (epoch=1)
+
+## 148
+
+(chosen - slightly prefer blur)
+train set: SR1.8 (noise)
+steps: 127000|1023000|2047000
+dataset: sRGB to linear (epoch=8)
+
+## 149
+
+(unexpected loss fluctuation at 554.9k results in randomly broken content)
+train set: SR1.8 (noise)
+steps: 1023000|2047000
 
 ---
 
